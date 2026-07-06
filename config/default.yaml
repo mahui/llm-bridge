@@ -14,6 +14,7 @@ providers:
   codex:
     enabled: true
     cli_path: "codex"
+    ignore_user_config: true   # skip ~/.codex skills/plugins (saves ~20k input tokens/request)
   gemini:
     enabled: true
     cli_path: "gemini"

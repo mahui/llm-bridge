@@ -40,7 +40,10 @@ async def lifespan(app: FastAPI):
         providers_to_init.append(("claude", cl))
 
     if config.providers.codex.enabled:
-        cx = CodexProvider(cli_path=config.providers.codex.cli_path)
+        cx = CodexProvider(
+            cli_path=config.providers.codex.cli_path,
+            ignore_user_config=config.providers.codex.ignore_user_config,
+        )
         providers_to_init.append(("codex", cx))
 
     if config.providers.gemini.enabled:

@@ -202,7 +202,9 @@ uv run python scripts/test_providers.py --stream-only
 
 - **Chat-only**: `tools` / function calling and multi-modal message content are not supported.
 - CLI subprocess mode has higher latency than direct API calls (~3-8s per request for codex/gemini).
-- Codex requests inherit your global Codex config (`~/.codex/`), including instruction files — this can add significant input-token overhead per request.
+- Codex runs with `--ignore-user-config` by default (skips `~/.codex` skills/plugins, which
+  otherwise add ~20k input tokens per request); set `providers.codex.ignore_user_config: false`
+  to load your global Codex config.
 - Codex model list is hardcoded (CLI has no list-models command).
 - Gemini free tier has strict rate limits (429).
 - Headless Claude usage is billed against monthly Agent SDK credits, not the interactive Claude Code pool.

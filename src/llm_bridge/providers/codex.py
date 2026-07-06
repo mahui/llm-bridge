@@ -60,9 +60,13 @@ def _format_prompt(request: ChatCompletionRequest) -> str:
 class CodexProvider(BaseProvider):
     """Provider adapter using Codex CLI subprocess (codex exec --json)."""
 
-    def __init__(self, cli_path: str = "codex") -> None:
+    def __init__(self, cli_path: str = "codex", ignore_user_config: bool = True) -> None:
         super().__init__()
         self.cli_path = cli_path
+        # ~/.codex/config.toml pulls in the user's skills/plugins and reasoning
+        # settings, which can add tens of thousands of input tokens per chat
+        # request. Auth is unaffected by --ignore-user-config.
+        self.ignore_user_config = ignore_user_config
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
     @property
@@ -104,6 +108,10 @@ class CodexProvider(BaseProvider):
             "--json",
             "--skip-git-repo-check",
             "--ephemeral",
+        ]
+        if self.ignore_user_config:
+            args.append("--ignore-user-config")
+        args += [
             "-m", self._resolve_model(model),
             "-",  # read prompt from stdin
         ]

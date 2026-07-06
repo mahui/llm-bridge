@@ -27,6 +27,9 @@ class ClaudeProviderConfig(BaseModel):
 class CodexProviderConfig(BaseModel):
     enabled: bool = True
     cli_path: str = "codex"
+    # Skip ~/.codex/config.toml (skills/plugins/reasoning overrides) to avoid
+    # large per-request instruction overhead. Auth is unaffected.
+    ignore_user_config: bool = True
 
 
 class GeminiProviderConfig(BaseModel):

@@ -31,9 +31,14 @@ LLM-Bridge is a local AI proxy gateway for personal use that wraps three AI CLI 
 ## Provider CLI Commands
 
 ```
-Codex:   codex exec --json --skip-git-repo-check --ephemeral -m {model} -
+Codex:   codex exec --json --skip-git-repo-check --ephemeral --ignore-user-config -m {model} -
 Gemini:  gemini -p - --output-format stream-json --model {model}
 ```
+
+`--ignore-user-config` keeps the user's `~/.codex` skills/plugins/reasoning
+settings out of gateway requests (~20k input tokens and xhigh-reasoning
+latency otherwise); auth still comes from `~/.codex`. Configurable via
+`providers.codex.ignore_user_config`.
 
 Both read prompts from stdin. Output is line-delimited JSON.
 
@@ -60,6 +65,5 @@ uv run python scripts/test_providers.py --providers claude codex  # Smoke test (
 - Chat-only (no tools/vision); requests with `role="tool"` messages are flattened away
 - CLI subprocess latency ~3-8s per request (codex/gemini)
 - Codex model list is hardcoded (CLI has no list-models command)
-- Codex inherits global `~/.codex` config, which can add large per-request input-token overhead
 - Gemini free tier has strict rate limits (429)
 - Headless Claude usage bills against monthly Agent SDK credits, not the interactive pool
