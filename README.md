@@ -123,6 +123,8 @@ Built-in ChatGPT-style interface at `http://localhost:8787`:
 - Streaming output with sanitized markdown rendering and code highlighting
 - Multiple concurrent conversations
 - Conversation history (localStorage)
+- Settings page (gear icon): API key for protected servers, default model for
+  new chats, global system prompt, and a provider status panel with login hints
 
 ## Management Endpoints
 
