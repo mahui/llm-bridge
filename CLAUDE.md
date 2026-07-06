@@ -61,6 +61,12 @@ uv run python scripts/test_providers.py --providers claude codex  # Smoke test (
 - `src/llm_bridge/web/static/index.html` — Single-file chat UI (vanilla JS, no framework)
 - `config/default.yaml` — Default config; user override at `~/.llm-bridge/config.yaml`
 
+## Agent Roles (.claude/agents/)
+
+- **info-architect** — 信息架构审查：配置/协议/命名/文档/UI 五条一致性链路。新增配置项、请求字段、改模型清单或文档的改动都应过一遍。本项目最高发的问题类别（配置未接线、文档漂移、静默丢弃字段）由它把关。
+- **provider-engineer** — provider 适配层：子进程三不变量（stderr DEVNULL / finally kill / stdin drain）、SDK/CLI 升级适配、合规红线（禁 token 直连）。
+- **gateway-verifier** — 端到端验证：重启服务器、冒烟测试、浏览器 UI 验证、孤儿进程检查。只验证不修码。
+
 ## Known Limitations
 
 - Chat-only (no tools/vision); requests with `role="tool"` messages are flattened away
