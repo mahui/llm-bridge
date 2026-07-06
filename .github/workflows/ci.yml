@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Lint (ruff)
+        run: uv run ruff check src scripts
+
+      - name: Import check
+        run: uv run python -c "import llm_bridge.web.app, llm_bridge.main"
+
+      - name: Build package
+        run: uv build
+
+      - name: Verify wheel contents
+        run: |
+          python3 - <<'EOF'
+          import glob, sys, zipfile
+          wheel = sorted(glob.glob("dist/*.whl"))[-1]
+          names = zipfile.ZipFile(wheel).namelist()
+          required = ["default.yaml", "static/index.html"]
+          missing = [r for r in required if not any(r in n for n in names)]
+          if missing:
+              sys.exit(f"wheel is missing package data: {missing}")
+          print(f"{wheel}: package data OK")
+          EOF
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14

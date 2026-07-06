@@ -59,7 +59,7 @@ uv run python scripts/test_providers.py --providers claude codex  # Smoke test (
 - `src/llm_bridge/gateway/` — Routing, middleware
 - `src/llm_bridge/api/` — FastAPI route handlers
 - `src/llm_bridge/web/static/index.html` — Single-file chat UI (vanilla JS, no framework)
-- `config/default.yaml` — Default config; user override at `~/.llm-bridge/config.yaml`
+- `src/llm_bridge/default.yaml` — Packaged default config; user override at `~/.llm-bridge/config.yaml`
 
 ## Agent Roles (.claude/agents/)
 

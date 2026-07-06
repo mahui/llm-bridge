@@ -93,9 +93,9 @@ def load_config(path: str | Path | None = None) -> BridgeConfig:
     global _config
 
     if path is None:
-        # Try user config first, then default
+        # Try user config first, then the packaged default (ships in the wheel)
         user_path = Path.home() / ".llm-bridge" / "config.yaml"
-        default_path = Path(__file__).resolve().parent.parent.parent / "config" / "default.yaml"
+        default_path = Path(__file__).resolve().parent / "default.yaml"
         path = user_path if user_path.exists() else default_path
 
     path = Path(path)

@@ -10,7 +10,7 @@ tools: Read, Grep, Glob, Bash
 
 每次被调用时，沿以下链路检查「同一信息在所有落点是否一致」：
 
-1. **配置链**：`config/default.yaml` 注释 ↔ `config.py` Pydantic 模型 ↔ `web/app.py` 装配处是否真正读取并传入。任何"定义了但没接线"的配置项都是 finding。
+1. **配置链**：`src/llm_bridge/default.yaml` 注释 ↔ `config.py` Pydantic 模型 ↔ `web/app.py` 装配处是否真正读取并传入。任何"定义了但没接线"的配置项都是 finding。
 2. **协议链**：`models.py` 的请求/响应字段 ↔ provider 是否消费 ↔ OpenAI 标准语义是否吻合。客户端按 OpenAI 标准传的字段若被静默丢弃，必须显式列出。
 3. **命名链**：模型全名 ↔ CLI 别名（MODEL_MAP）↔ routing.aliases ↔ README 示例 ↔ 前端展示，五处是否同一套词汇。
 4. **文档链**：README.md ↔ CLAUDE.md ↔ 代码注释 ↔ 实际 CLI 命令旗标。特别注意 Known Limitations 是否还成立（修掉的要删，新增的要补）。
