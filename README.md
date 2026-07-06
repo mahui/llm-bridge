@@ -27,7 +27,7 @@ Agent    CLI       CLI
 
 | Provider | Harness | Models |
 |----------|---------|--------|
-| Claude | claude-agent-sdk (bundled CLI) | claude-sonnet-4-6, claude-opus-4-6 |
+| Claude | claude-agent-sdk (bundled CLI) | claude-fable-5, claude-opus-4-8, claude-sonnet-5, claude-haiku-4-5 |
 | Codex | `codex exec --json` subprocess | gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, ... |
 | Gemini | `gemini -p - --output-format stream-json` subprocess | gemini-3.1-pro-preview, gemini-2.5-pro, ... |
 
@@ -70,7 +70,7 @@ uv run llm-bridge --config my.yaml  # Custom config file
 curl http://localhost:8787/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude/claude-sonnet-4-6",
+    "model": "claude/claude-sonnet-5",
     "messages": [{"role": "user", "content": "Hello!"}],
     "stream": true
   }'
@@ -87,13 +87,13 @@ curl http://localhost:8787/v1/models
 Models use `provider/model-name` format:
 
 ```
-claude/claude-sonnet-4-6       # Claude Sonnet via Agent SDK
-claude/claude-opus-4-6         # Claude Opus via Agent SDK
+claude/claude-fable-5          # Claude Fable 5 via Agent SDK
+claude/claude-sonnet-5         # Claude Sonnet 5 via Agent SDK
 codex/gpt-5.4                  # GPT-5.4 via Codex CLI
 gemini/gemini-2.5-pro          # Gemini 2.5 Pro via CLI
 ```
 
-Aliases (configurable in `config/default.yaml`): `sonnet`, `opus`, `gemini-pro`, `flash`.
+Aliases (configurable in `config/default.yaml`): `fable`, `opus`, `sonnet`, `haiku`, `gemini-pro`, `flash`.
 
 ### OpenAI SDK Integration
 
@@ -106,7 +106,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="claude/claude-sonnet-4-6",
+    model="claude/claude-sonnet-5",
     messages=[{"role": "user", "content": "Hello!"}],
     stream=True,
 )
@@ -150,9 +150,9 @@ providers:
   gemini: { enabled: true }
 
 routing:
-  default_model: "claude/claude-sonnet-4-6"
+  default_model: "claude/claude-sonnet-5"
   aliases:
-    sonnet: "claude/claude-sonnet-4-6"
+    sonnet: "claude/claude-sonnet-5"
 ```
 
 ## Project Structure

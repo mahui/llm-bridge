@@ -13,7 +13,7 @@ PROMPT = "Say 'hello world' and nothing else."
 
 # One model per provider to test
 TEST_MODELS = [
-    ("claude", "claude/claude-sonnet-4-6"),
+    ("claude", "claude/claude-haiku-4-5"),
     ("codex", "codex/gpt-5.4-mini"),
     ("gemini", "gemini/gemini-2.5-flash"),
 ]

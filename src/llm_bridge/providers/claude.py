@@ -45,20 +45,28 @@ from llm_bridge.providers.base import BaseProvider, ProviderError, ProviderStatu
 
 logger = logging.getLogger(__name__)
 
-# Model name mapping: short name -> SDK model alias. Unknown names pass
-# through unchanged — the CLI accepts full model names (e.g. claude-fable-5).
+# Model name mapping: full name -> CLI alias (current lineup per the CLI's
+# interactive /model picker: Fable 5, Opus 4.8, Sonnet 5, Haiku 4.5).
+# Unknown names pass through unchanged — the CLI accepts full model names.
 MODEL_MAP = {
-    "claude-sonnet-4-6": "sonnet",
-    "claude-opus-4-6": "opus",
     "claude-fable-5": "fable",
-    "sonnet": "sonnet",
-    "opus": "opus",
+    "claude-opus-4-8": "opus",
+    "claude-sonnet-5": "sonnet",
+    "claude-haiku-4-5": "haiku",
     "fable": "fable",
+    "opus": "opus",
+    "sonnet": "sonnet",
+    "haiku": "haiku",
 }
 
 # Fallback when no Anthropic API key is configured for dynamic listing.
 # (No CLI list-models command exists: anthropics/claude-code#12612)
-FALLBACK_MODELS = ["claude-fable-5", "claude-sonnet-4-6", "claude-opus-4-6"]
+FALLBACK_MODELS = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-sonnet-5",
+    "claude-haiku-4-5",
+]
 
 MODELS_API_URL = "https://api.anthropic.com/v1/models"
 MODELS_CACHE_TTL = 3600.0  # seconds

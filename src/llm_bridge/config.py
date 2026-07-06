@@ -48,7 +48,7 @@ class ProvidersConfig(BaseModel):
 
 
 class RoutingConfig(BaseModel):
-    default_model: str = "claude/claude-sonnet-4-6"
+    default_model: str = "claude/claude-sonnet-5"
     aliases: dict[str, str] = Field(default_factory=dict)
 
 
