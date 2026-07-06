@@ -1,28 +1,22 @@
+# LLM-Bridge default configuration
+# User override: ~/.llm-bridge/config.yaml or --config <path>
+
 server:
-  host: "127.0.0.1"
+  host: "127.0.0.1"   # keep loopback-only unless you know what you're doing
   port: 8787
-  api_key: ""  # Leave empty to disable API key auth; or set LLM_BRIDGE_API_KEY env var
+  api_key: ""          # set to require Authorization: Bearer <key>; or LLM_BRIDGE_API_KEY env var
 
+# All providers use official CLI/SDK harnesses (subscription-sanctioned).
 providers:
-  antigravity:
-    enabled: true
-    api_base: "https://cloudcode-pa.googleapis.com"
-    project_id: ""  # Auto-detected from Gemini CLI creds if empty
-
   claude:
     enabled: true
-    mode: "cli"  # "cli" or "api"
-    cli_path: "claude"
-
+    cli_path: "claude"   # informational; the bundled Agent SDK CLI is used
   codex:
     enabled: true
-    api_base: "https://api.openai.com"
-    auth_file: "~/.codex/auth.json"
-
+    cli_path: "codex"
   gemini:
     enabled: true
-    api_base: "https://cloudcode-pa.googleapis.com"
-    auth_file: "~/.gemini/oauth_creds.json"
+    cli_path: "gemini"
 
 routing:
   default_model: "claude/claude-sonnet-4-6"
@@ -32,16 +26,5 @@ routing:
     gemini-pro: "gemini/gemini-2.5-pro"
     flash: "gemini/gemini-2.5-flash"
 
-rate_limiting:
-  enabled: true
-  default_rpm: 60
-  per_provider:
-    antigravity: { rpm: 30, max_concurrent: 3 }
-    codex: { rpm: 20, max_concurrent: 2 }
-    claude: { rpm: 10, max_concurrent: 1 }
-    gemini: { rpm: 15, max_concurrent: 2 }
-
 logging:
   level: "INFO"
-  track_usage: true
-  usage_log: "~/.llm-bridge/usage.jsonl"

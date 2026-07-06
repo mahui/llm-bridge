@@ -1,13 +1,28 @@
-"""Claude Code adapter - CLI subprocess mode."""
+"""Claude adapter - official claude-agent-sdk.
+
+Uses the Agent SDK instead of hand-rolled `claude --print` subprocesses:
+the SDK owns process lifecycle (including cleanup on client disconnect),
+emits token-level stream events, and is the Anthropic-sanctioned way to
+consume subscription quota headlessly (Agent SDK credits).
+"""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
+from contextlib import aclosing
 from typing import AsyncIterator
 
-from llm_bridge.convert.anthropic import format_messages_as_prompt
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ClaudeSDKError,
+    ResultMessage,
+    StreamEvent,
+    TextBlock,
+    query,
+)
+
 from llm_bridge.convert.streaming import (
     StreamState,
     make_content_chunk,
@@ -27,7 +42,7 @@ from llm_bridge.providers.base import BaseProvider, ProviderError, ProviderStatu
 
 logger = logging.getLogger(__name__)
 
-# Model name mapping: short name -> CLI model flag
+# Model name mapping: short name -> SDK model alias
 MODEL_MAP = {
     "claude-sonnet-4-6": "sonnet",
     "claude-opus-4-6": "opus",
@@ -37,16 +52,38 @@ MODEL_MAP = {
 
 AVAILABLE_MODELS = ["claude-sonnet-4-6", "claude-opus-4-6"]
 
-# Limit concurrent CLI processes
+# Limit concurrent SDK sessions (each spawns a CLI process)
 MAX_CONCURRENT = 2
+
+STOP_REASON_MAP = {
+    "end_turn": "stop",
+    "max_tokens": "length",
+    "stop_sequence": "stop",
+}
+
+
+def _split_messages(request: ChatCompletionRequest) -> tuple[str | None, str]:
+    """Split OpenAI messages into (system_prompt, flattened_prompt)."""
+    system_parts = []
+    parts = []
+    for msg in request.messages:
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        if msg.role == "system":
+            system_parts.append(content)
+        elif msg.role == "user":
+            parts.append(content)
+        elif msg.role == "assistant":
+            parts.append(f"[Previous Assistant Response]\n{content}")
+    system_prompt = "\n\n".join(system_parts) if system_parts else None
+    return system_prompt, "\n\n".join(parts)
 
 
 class ClaudeProvider(BaseProvider):
-    """Provider adapter using Claude CLI's --print mode."""
+    """Provider adapter using the official claude-agent-sdk."""
 
     def __init__(self, cli_path: str = "claude") -> None:
         super().__init__()
-        self.cli_path = cli_path
+        self.cli_path = cli_path  # kept for config compat; SDK bundles its own CLI
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
     @property
@@ -54,105 +91,61 @@ class ClaudeProvider(BaseProvider):
         return "claude"
 
     async def initialize(self) -> None:
-        # Verify claude CLI is available
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                self.cli_path, "--version",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
-            version = stdout.decode().strip()
-            logger.info("Claude CLI found: %s", version)
-            self._status = ProviderStatus.READY
-        except (FileNotFoundError, asyncio.TimeoutError) as e:
-            logger.warning("Claude CLI not available: %s", e)
-            self._status = ProviderStatus.ERROR
+        # The SDK bundles its own CLI, so availability is not PATH-dependent.
+        # Auth problems surface per-request as ProviderError.
+        from claude_agent_sdk._cli_version import __cli_version__
+
+        logger.info("Claude provider using claude-agent-sdk (bundled CLI %s)", __cli_version__)
+        self._status = ProviderStatus.READY
 
     async def shutdown(self) -> None:
         pass
 
-    def _resolve_model(self, model: str) -> str:
-        """Resolve model name to CLI flag."""
-        model_key = model.split("/")[-1]
-        return MODEL_MAP.get(model_key, "sonnet")
-
-    async def _run_cli(
-        self, prompt: str, model: str
-    ) -> asyncio.subprocess.Process:
-        """Start a Claude CLI subprocess. Prompt is sent via stdin."""
-        args = [
-            self.cli_path,
-            "--print",
-            "--output-format", "stream-json",
-            "--verbose",
-            "--model", self._resolve_model(model),
-            "-p", "-",  # read prompt from stdin
-        ]
-        proc = await asyncio.create_subprocess_exec(
-            *args,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+    def _build_options(
+        self, request: ChatCompletionRequest, system_prompt: str | None, streaming: bool
+    ) -> ClaudeAgentOptions:
+        model_key = request.model.split("/")[-1]
+        return ClaudeAgentOptions(
+            model=MODEL_MAP.get(model_key, "sonnet"),
+            system_prompt=system_prompt,
+            tools=[],  # pure chat: no built-in tools
+            max_turns=1,
+            include_partial_messages=streaming,
         )
-        proc.stdin.write(prompt.encode())
-        proc.stdin.close()
-        return proc
 
     async def complete(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
-        prompt = format_messages_as_prompt(request.messages)
+        system_prompt, prompt = _split_messages(request)
         model_name = f"claude/{request.model.split('/', 1)[-1]}"
+        options = self._build_options(request, system_prompt, streaming=False)
+
+        text_parts: list[str] = []
+        usage = UsageInfo()
+        finish_reason = "stop"
 
         async with self._semaphore:
-            proc = await self._run_cli(prompt, request.model)
-
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=300
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
+                async with aclosing(query(prompt=prompt, options=options)) as messages:
+                    async for message in messages:
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    text_parts.append(block.text)
+                            if message.stop_reason:
+                                finish_reason = STOP_REASON_MAP.get(message.stop_reason, "stop")
+                        elif isinstance(message, ResultMessage):
+                            if message.is_error:
+                                raise ProviderError(
+                                    f"Claude SDK error: {message.result or message.subtype}",
+                                    status_code=500, retryable=True, provider=self.name,
+                                )
+                            if message.usage:
+                                usage.prompt_tokens = message.usage.get("input_tokens", 0)
+                                usage.completion_tokens = message.usage.get("output_tokens", 0)
+            except ClaudeSDKError as e:
                 raise ProviderError(
-                    "Claude CLI timed out",
-                    status_code=504,
-                    retryable=True,
-                    provider=self.name,
-                )
-
-        if proc.returncode != 0:
-            raise ProviderError(
-                f"Claude CLI exited with code {proc.returncode}: {stderr.decode()[:500]}",
-                status_code=500,
-                retryable=True,
-                provider=self.name,
-            )
-
-        # Parse stream-json output: collect all text content
-        text_parts = []
-        usage = UsageInfo()
-
-        for line in stdout.decode().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            if event.get("type") == "assistant":
-                message = event.get("message", {})
-                for block in message.get("content", []):
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text_parts.append(block["text"])
-                msg_usage = message.get("usage", {})
-                usage.prompt_tokens += msg_usage.get("input_tokens", 0)
-                usage.completion_tokens += msg_usage.get("output_tokens", 0)
-            elif event.get("type") == "result":
-                result_usage = event.get("usage", {})
-                if isinstance(result_usage, dict) and result_usage:
-                    usage.prompt_tokens = result_usage.get("input_tokens", usage.prompt_tokens)
-                    usage.completion_tokens = result_usage.get("output_tokens", usage.completion_tokens)
+                    f"Claude SDK error: {e}", status_code=500,
+                    retryable=True, provider=self.name,
+                ) from e
 
         usage.total_tokens = usage.prompt_tokens + usage.completion_tokens
 
@@ -161,45 +154,57 @@ class ClaudeProvider(BaseProvider):
             choices=[
                 ChatCompletionChoice(
                     message=ChatCompletionMessage(content="".join(text_parts)),
-                    finish_reason="stop",
+                    finish_reason=finish_reason,
                 )
             ],
             usage=usage,
         )
 
     async def stream(self, request: ChatCompletionRequest) -> AsyncIterator[ChatCompletionChunk]:
-        prompt = format_messages_as_prompt(request.messages)
+        system_prompt, prompt = _split_messages(request)
         model_name = f"claude/{request.model.split('/', 1)[-1]}"
+        options = self._build_options(request, system_prompt, streaming=True)
         state = StreamState(model=model_name)
+        usage: UsageInfo | None = None
+        finish_reason = "stop"
 
         async with self._semaphore:
-            proc = await self._run_cli(prompt, request.model)
-
             yield make_role_chunk(state)
-
             try:
-                async for raw_line in proc.stdout:
-                    line = raw_line.decode().strip()
-                    if not line:
-                        continue
-                    try:
-                        event = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
+                # aclosing() propagates generator close (client disconnect)
+                # into the SDK, which tears down its CLI process.
+                async with aclosing(query(prompt=prompt, options=options)) as messages:
+                    async for message in messages:
+                        if isinstance(message, StreamEvent):
+                            event = message.event
+                            if event.get("type") == "content_block_delta":
+                                delta = event.get("delta", {})
+                                if delta.get("type") == "text_delta" and delta.get("text"):
+                                    yield make_content_chunk(delta["text"], state)
+                            elif event.get("type") == "message_delta":
+                                stop = event.get("delta", {}).get("stop_reason")
+                                if stop:
+                                    finish_reason = STOP_REASON_MAP.get(stop, "stop")
+                        elif isinstance(message, ResultMessage):
+                            if message.is_error:
+                                raise ProviderError(
+                                    f"Claude SDK error: {message.result or message.subtype}",
+                                    status_code=500, retryable=True, provider=self.name,
+                                )
+                            if message.usage:
+                                usage = UsageInfo(
+                                    prompt_tokens=message.usage.get("input_tokens", 0),
+                                    completion_tokens=message.usage.get("output_tokens", 0),
+                                    total_tokens=message.usage.get("input_tokens", 0)
+                                    + message.usage.get("output_tokens", 0),
+                                )
+            except ClaudeSDKError as e:
+                raise ProviderError(
+                    f"Claude SDK error: {e}", status_code=500,
+                    retryable=True, provider=self.name,
+                ) from e
 
-                    if event.get("type") == "assistant":
-                        message = event.get("message", {})
-                        for block in message.get("content", []):
-                            if isinstance(block, dict) and block.get("type") == "text":
-                                yield make_content_chunk(block["text"], state)
-                    elif event.get("type") == "result":
-                        break
-
-                await asyncio.wait_for(proc.wait(), timeout=10)
-            except asyncio.TimeoutError:
-                proc.kill()
-
-        yield make_final_chunk(state)
+        yield make_final_chunk(state, finish_reason=finish_reason, usage=usage)
 
     async def list_models(self) -> list[ModelInfo]:
         return [

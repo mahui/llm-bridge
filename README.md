@@ -1,6 +1,13 @@
 # LLM-Bridge
 
-Local multi-model AI proxy gateway. Unifies Codex, Claude Code, Gemini CLI, and Antigravity behind a single OpenAI-compatible API with a built-in chat UI.
+Local multi-model AI proxy gateway for **personal use**. Unifies Claude Code, Codex, and Gemini CLI behind a single OpenAI-compatible API with a built-in chat UI, reusing each tool's own subscription authentication.
+
+> **Scope**: chat-only, single-user, localhost. Tool calling and multi-modal
+> inputs are not supported. All providers go through official CLI/SDK
+> harnesses — this gateway never extracts or replays OAuth tokens, which the
+> providers have banned for third-party use (Anthropic enforced this in
+> April 2026; note that headless Claude usage draws from monthly Agent SDK
+> credits, not the interactive subscription pool).
 
 ## Architecture
 
@@ -9,22 +16,20 @@ Clients (Web UI / curl / OpenAI SDK)
           |
     OpenAI-compatible API (:8787)
           |
-    Gateway (routing, rate limiting, middleware)
+    Gateway (routing, middleware)
           |
-  +-------+-------+--------+-----------+
-  |       |       |        |           |
-Claude  Codex   Gemini  Antigravity
- CLI     CLI     CLI    cloudcode API
+  +-------+---------+
+  |       |         |
+Claude   Codex    Gemini
+Agent    CLI       CLI
+ SDK   (exec)   (stream-json)
 ```
 
-All four providers use **CLI subprocess** mode as the primary strategy, leveraging each tool's built-in authentication:
-
-| Provider | Command | Models |
+| Provider | Harness | Models |
 |----------|---------|--------|
-| Claude | `claude --print --output-format stream-json` | claude-sonnet-4-6, claude-opus-4-6 |
-| Codex | `codex exec --json` | gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, ... |
-| Gemini | `gemini -p --output-format stream-json` | gemini-3.1-pro-preview, gemini-3-flash-preview, gemini-2.5-pro, ... |
-| Antigravity | Direct HTTP to cloudcode-pa API | claude-sonnet-4-6-thinking, gemini-3.1-pro-high, ... |
+| Claude | claude-agent-sdk (bundled CLI) | claude-sonnet-4-6, claude-opus-4-6 |
+| Codex | `codex exec --json` subprocess | gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, ... |
+| Gemini | `gemini -p - --output-format stream-json` subprocess | gemini-3.1-pro-preview, gemini-2.5-pro, ... |
 
 ## Quick Start
 
@@ -32,7 +37,7 @@ All four providers use **CLI subprocess** mode as the primary strategy, leveragi
 
 - Python 3.12+
 - [uv](https://github.com/astral-sh/uv)
-- At least one CLI tool installed and logged in: `claude`, `codex`, or `gemini`
+- At least one CLI tool logged in: `claude`, `codex`, or `gemini`
 
 ### Install & Run
 
@@ -53,14 +58,11 @@ uv run llm-bridge
 ```bash
 uv run llm-bridge                    # Default: 127.0.0.1:8787
 uv run llm-bridge --port 9000       # Custom port
-uv run llm-bridge --host 0.0.0.0    # Listen on all interfaces
 uv run llm-bridge --debug           # Debug logging
 uv run llm-bridge --config my.yaml  # Custom config file
 ```
 
 ## API Usage
-
-### OpenAI-Compatible Endpoints
 
 **Chat Completions** (streaming & non-streaming):
 
@@ -85,23 +87,13 @@ curl http://localhost:8787/v1/models
 Models use `provider/model-name` format:
 
 ```
-claude/claude-sonnet-4-6       # Claude Sonnet via CLI
-claude/claude-opus-4-6         # Claude Opus via CLI
+claude/claude-sonnet-4-6       # Claude Sonnet via Agent SDK
+claude/claude-opus-4-6         # Claude Opus via Agent SDK
 codex/gpt-5.4                  # GPT-5.4 via Codex CLI
-codex/gpt-5.4-mini             # GPT-5.4 Mini via Codex CLI
 gemini/gemini-2.5-pro          # Gemini 2.5 Pro via CLI
-gemini/gemini-3.1-pro-preview  # Gemini 3.1 Pro via CLI
-antigravity/claude-sonnet-4-6  # Claude via Cloud Code Assist API
 ```
 
-Aliases are available (configurable in `config/default.yaml`):
-
-```
-sonnet     -> claude/claude-sonnet-4-6
-opus       -> claude/claude-opus-4-6
-gemini-pro -> gemini/gemini-2.5-pro
-flash      -> gemini/gemini-2.5-flash
-```
+Aliases (configurable in `config/default.yaml`): `sonnet`, `opus`, `gemini-pro`, `flash`.
 
 ### OpenAI SDK Integration
 
@@ -126,28 +118,23 @@ for chunk in response:
 
 Built-in ChatGPT-style interface at `http://localhost:8787`:
 
-- Model selector with all available models grouped by provider
+- Model selector grouped by provider
 - Per-conversation model selection
-- Streaming output with markdown rendering and code highlighting
+- Streaming output with sanitized markdown rendering and code highlighting
 - Multiple concurrent conversations
 - Conversation history (localStorage)
 
 ## Management Endpoints
 
 ```bash
-# Provider health status
-curl http://localhost:8787/admin/health
-
-# Authentication status
-curl http://localhost:8787/auth/status
-
-# Swagger API docs
-open http://localhost:8787/docs
+curl http://localhost:8787/admin/health   # Provider health
+curl http://localhost:8787/auth/status    # Harness availability + login hints
+open http://localhost:8787/docs           # Swagger API docs
 ```
 
 ## Configuration
 
-Default config at `config/default.yaml`. Override with `~/.llm-bridge/config.yaml` or `--config` flag.
+Default config at `config/default.yaml`. Override with `~/.llm-bridge/config.yaml` or `--config`.
 
 ```yaml
 server:
@@ -156,26 +143,14 @@ server:
   api_key: ""  # Set to protect the API; or use LLM_BRIDGE_API_KEY env var
 
 providers:
-  claude:
-    enabled: true
-    cli_path: "claude"
-  codex:
-    enabled: true
-  gemini:
-    enabled: true
-  antigravity:
-    enabled: true
+  claude: { enabled: true }
+  codex: { enabled: true }
+  gemini: { enabled: true }
 
 routing:
   default_model: "claude/claude-sonnet-4-6"
   aliases:
     sonnet: "claude/claude-sonnet-4-6"
-
-rate_limiting:
-  enabled: true
-  per_provider:
-    claude: { rpm: 10, max_concurrent: 1 }
-    codex: { rpm: 20, max_concurrent: 2 }
 ```
 
 ## Project Structure
@@ -190,53 +165,47 @@ agent-proxy/
 │   ├── models.py               # OpenAI-compatible Pydantic models
 │   ├── providers/
 │   │   ├── base.py             # Provider abstract base class
-│   │   ├── claude.py           # Claude Code CLI adapter
+│   │   ├── claude.py           # claude-agent-sdk adapter
 │   │   ├── codex.py            # Codex CLI adapter
-│   │   ├── gemini.py           # Gemini CLI adapter
-│   │   └── antigravity.py      # Cloud Code Assist API adapter
-│   ├── auth/
-│   │   ├── manager.py          # Credential lifecycle management
-│   │   ├── cli_detect.py       # Auto-detect CLI credentials
-│   │   ├── oauth.py            # Google OAuth PKCE flow
-│   │   └── store.py            # Encrypted credential storage
+│   │   └── gemini.py           # Gemini CLI adapter
 │   ├── convert/
 │   │   ├── openai.py           # OpenAI format (canonical)
-│   │   ├── anthropic.py        # Anthropic format conversion
-│   │   ├── gemini.py           # Gemini format conversion
-│   │   └── streaming.py        # SSE parser & chunk utilities
+│   │   └── streaming.py        # Streaming chunk utilities
 │   ├── gateway/
 │   │   ├── router.py           # Model routing & resolution
-│   │   ├── rate_limiter.py     # Token-bucket rate limiter
 │   │   └── middleware.py       # Auth, logging, error handling
 │   ├── api/
 │   │   ├── chat.py             # /v1/chat/completions
 │   │   ├── models.py           # /v1/models
-│   │   ├── auth.py             # /auth/*
+│   │   ├── auth.py             # /auth/* (status + login hints)
 │   │   └── admin.py            # /admin/*
 │   └── web/
 │       ├── app.py              # FastAPI application factory
 │       └── static/index.html   # Chat UI
 ├── scripts/
-│   └── test_providers.py       # Provider integration tests
-└── tests/
+│   └── test_providers.py       # Provider integration smoke tests
+└── tests/                      # (unit tests: TODO)
 ```
 
 ## Testing
 
+Integration smoke tests (require a running server and logged-in CLIs):
+
 ```bash
-# Start the server first
 uv run llm-bridge &
-
-# Run all provider tests
-uv run python scripts/test_providers.py
-
-# Test specific providers
-uv run python scripts/test_providers.py --providers claude codex
-
-# Streaming only / non-streaming only
+uv run python scripts/test_providers.py                       # All providers
+uv run python scripts/test_providers.py --providers claude    # One provider
 uv run python scripts/test_providers.py --stream-only
-uv run python scripts/test_providers.py --no-stream
 ```
+
+## Known Limitations
+
+- **Chat-only**: `tools` / function calling and multi-modal message content are not supported.
+- CLI subprocess mode has higher latency than direct API calls (~3-8s per request for codex/gemini).
+- Codex requests inherit your global Codex config (`~/.codex/`), including instruction files — this can add significant input-token overhead per request.
+- Codex model list is hardcoded (CLI has no list-models command).
+- Gemini free tier has strict rate limits (429).
+- Headless Claude usage is billed against monthly Agent SDK credits, not the interactive Claude Code pool.
 
 ## License
 

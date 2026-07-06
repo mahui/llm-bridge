@@ -1,12 +1,10 @@
-"""SSE parsing and OpenAI streaming chunk utilities."""
+"""OpenAI streaming chunk utilities."""
 
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import AsyncIterator
 
 from llm_bridge.models import (
     ChatCompletionChunk,
@@ -14,64 +12,6 @@ from llm_bridge.models import (
     ChatCompletionChunkDelta,
     UsageInfo,
 )
-
-
-# ---------------------------------------------------------------------------
-# SSE Parser
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class SSEEvent:
-    event: str = "message"
-    data: str = ""
-    id: str = ""
-
-
-async def parse_sse(aiter_lines: AsyncIterator[str]) -> AsyncIterator[SSEEvent]:
-    """Parse a raw SSE stream (line iterator) into SSEEvent objects."""
-    current = SSEEvent()
-    data_parts: list[str] = []
-
-    async for line in aiter_lines:
-        line = line.rstrip("\r\n")
-
-        if not line:
-            # Empty line = event boundary
-            if data_parts:
-                current.data = "\n".join(data_parts)
-                yield current
-                current = SSEEvent()
-                data_parts = []
-            continue
-
-        if line.startswith(":"):
-            # Comment line, skip
-            continue
-
-        if ":" in line:
-            field_name, _, value = line.partition(":")
-            value = value.lstrip(" ")
-        else:
-            field_name = line
-            value = ""
-
-        if field_name == "data":
-            data_parts.append(value)
-        elif field_name == "event":
-            current.event = value
-        elif field_name == "id":
-            current.id = value
-
-    # Flush remaining
-    if data_parts:
-        current.data = "\n".join(data_parts)
-        yield current
-
-
-# ---------------------------------------------------------------------------
-# Chunk factory functions
-# ---------------------------------------------------------------------------
 
 
 def new_chunk_id() -> str:

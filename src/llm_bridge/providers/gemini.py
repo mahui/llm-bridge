@@ -1,4 +1,4 @@
-"""Gemini adapter - CLI subprocess (primary) + Cloud Code Assist API (fallback)."""
+"""Gemini adapter - CLI subprocess mode."""
 
 from __future__ import annotations
 
@@ -7,16 +7,11 @@ import json
 import logging
 from typing import AsyncIterator
 
-import httpx
-
-from llm_bridge.auth.manager import AuthManager
-from llm_bridge.convert.gemini import from_gemini_response, to_gemini_request
 from llm_bridge.convert.streaming import (
     StreamState,
     make_content_chunk,
     make_final_chunk,
     make_role_chunk,
-    parse_sse,
 )
 from llm_bridge.models import (
     ChatCompletionChoice,
@@ -65,34 +60,18 @@ def _format_prompt(request: ChatCompletionRequest) -> str:
 
 
 class GeminiProvider(BaseProvider):
-    """Provider adapter using Gemini CLI subprocess (primary) with API fallback."""
+    """Provider adapter using Gemini CLI subprocess."""
 
-    def __init__(
-        self,
-        auth_manager: AuthManager,
-        cli_path: str = "gemini",
-        api_base: str = "https://cloudcode-pa.googleapis.com",
-        project_id: str = "",
-        mode: str = "cli",  # "cli" or "api"
-    ) -> None:
+    def __init__(self, cli_path: str = "gemini") -> None:
         super().__init__()
-        self.auth_manager = auth_manager
         self.cli_path = cli_path
-        self.api_base = api_base.rstrip("/")
-        self.project_id = project_id
-        self.mode = mode
-        self._client: httpx.AsyncClient | None = None
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-        self._cli_available = False
 
     @property
     def name(self) -> str:
         return "gemini"
 
     async def initialize(self) -> None:
-        self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0), http2=True)
-
-        # Check if Gemini CLI is available
         try:
             proc = await asyncio.create_subprocess_exec(
                 self.cli_path, "--version",
@@ -101,75 +80,28 @@ class GeminiProvider(BaseProvider):
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
             version = stdout.decode().strip()
-            self._cli_available = True
             logger.info("Gemini CLI found: %s", version)
+            self._status = ProviderStatus.READY
         except (FileNotFoundError, asyncio.TimeoutError) as e:
             logger.warning("Gemini CLI not available: %s", e)
-            self._cli_available = False
-
-        if self._cli_available and self.mode == "cli":
-            self._status = ProviderStatus.READY
-            logger.info("Gemini provider initialized (mode: cli)")
-            return
-
-        # Fallback to API mode
-        if not self.auth_manager.is_authenticated("gemini"):
-            if self._cli_available:
-                self._status = ProviderStatus.READY
-                self.mode = "cli"
-                logger.info("Gemini provider initialized (mode: cli, no API creds)")
-            else:
-                self._status = ProviderStatus.ERROR
-                logger.warning("Gemini: no CLI and no API credentials")
-            return
-
-        # API mode: get project_id
-        try:
-            if not self.project_id:
-                await self._load_code_assist()
-            self.mode = "api"
-            self._status = ProviderStatus.READY
-            logger.info("Gemini provider initialized (mode: api, project: %s)", self.project_id)
-        except Exception as e:
-            if self._cli_available:
-                self.mode = "cli"
-                self._status = ProviderStatus.READY
-                logger.info("Gemini API init failed, using CLI mode: %s", e)
-            else:
-                logger.warning("Gemini initialization failed: %s", e)
-                self._status = ProviderStatus.ERROR
-
-    async def _load_code_assist(self) -> None:
-        """Call loadCodeAssist to get the server-assigned project ID."""
-        headers = await self._get_headers()
-        resp = await self._client.post(
-            f"{self.api_base}/v1internal:loadCodeAssist",
-            headers=headers,
-            json={},
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            project = data.get("cloudaicompanionProject", "")
-            if project:
-                self.project_id = project
-                logger.info("Gemini: obtained project_id=%s", project)
-        else:
-            logger.warning("Gemini loadCodeAssist returned %d", resp.status_code)
+            self._status = ProviderStatus.ERROR
 
     async def shutdown(self) -> None:
-        if self._client:
-            await self._client.aclose()
-
-    # ------------------------------------------------------------------
-    # CLI mode
-    # ------------------------------------------------------------------
+        pass
 
     def _resolve_model(self, model: str) -> str:
         model_key = model.split("/")[-1]
         return MODEL_MAP.get(model_key, model_key)
 
-    async def _run_cli(self, prompt: str, model: str) -> asyncio.subprocess.Process:
-        """Start Gemini CLI subprocess. Prompt via stdin to avoid arg length limits."""
+    async def _run_cli(
+        self, prompt: str, model: str, capture_stderr: bool
+    ) -> asyncio.subprocess.Process:
+        """Start Gemini CLI subprocess. Prompt via stdin to avoid arg length limits.
+
+        The streaming path never drains stderr, so it must be DEVNULL there —
+        a full pipe buffer would deadlock the child. communicate() drains it,
+        so the non-streaming path can capture it for error classification.
+        """
         args = [
             self.cli_path,
             "-p", "-",  # read prompt from stdin
@@ -180,22 +112,24 @@ class GeminiProvider(BaseProvider):
             *args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE if capture_stderr else asyncio.subprocess.DEVNULL,
         )
         proc.stdin.write(prompt.encode())
+        await proc.stdin.drain()
         proc.stdin.close()
         return proc
 
-    async def _complete_cli(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
+    async def complete(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
         prompt = _format_prompt(request)
         model_name = f"gemini/{request.model.split('/', 1)[-1]}"
 
         async with self._semaphore:
-            proc = await self._run_cli(prompt, request.model)
+            proc = await self._run_cli(prompt, request.model, capture_stderr=True)
             try:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
             except asyncio.TimeoutError:
                 proc.kill()
+                await proc.wait()
                 raise ProviderError(
                     "Gemini CLI timed out", status_code=504,
                     retryable=True, provider=self.name,
@@ -203,7 +137,6 @@ class GeminiProvider(BaseProvider):
 
         if proc.returncode != 0:
             err_text = stderr.decode()[:500]
-            # Check for rate limiting in CLI error
             if "quota" in err_text.lower() or "exhausted" in err_text.lower():
                 raise ProviderError(
                     f"Gemini rate limited: {err_text}",
@@ -240,7 +173,6 @@ class GeminiProvider(BaseProvider):
                 usage.prompt_tokens = stats.get("input_tokens", 0)
                 usage.completion_tokens = stats.get("output_tokens", 0)
                 usage.total_tokens = stats.get("total_tokens", 0)
-                # Check for error in result
                 if event.get("status") == "error":
                     err_msg = event.get("error", {}).get("message", "Unknown error")
                     if "quota" in err_msg.lower() or "exhausted" in err_msg.lower():
@@ -264,19 +196,19 @@ class GeminiProvider(BaseProvider):
             usage=usage,
         )
 
-    async def _stream_cli(
+    async def stream(
         self, request: ChatCompletionRequest
     ) -> AsyncIterator[ChatCompletionChunk]:
         prompt = _format_prompt(request)
         model_name = f"gemini/{request.model.split('/', 1)[-1]}"
         state = StreamState(model=model_name)
+        finish_reason = "stop"
 
         async with self._semaphore:
-            proc = await self._run_cli(prompt, request.model)
-
-            yield make_role_chunk(state)
-
+            proc = await self._run_cli(prompt, request.model, capture_stderr=False)
             try:
+                yield make_role_chunk(state)
+
                 async for raw_line in proc.stdout:
                     line = raw_line.decode().strip()
                     if not line:
@@ -307,117 +239,18 @@ class GeminiProvider(BaseProvider):
                             )
                         break
 
-                await asyncio.wait_for(proc.wait(), timeout=10)
-            except ProviderError:
-                proc.kill()
-                raise
-            except asyncio.TimeoutError:
-                proc.kill()
-
-        yield make_final_chunk(state)
-
-    # ------------------------------------------------------------------
-    # API mode
-    # ------------------------------------------------------------------
-
-    async def _get_headers(self) -> dict[str, str]:
-        token = await self.auth_manager.get_access_token("gemini")
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": "llm-bridge/0.1.0 (compatible; GeminiCLI)",
-            "X-Goog-Api-Client": "gl-python/3.12",
-        }
-
-    def _build_payload(self, request: ChatCompletionRequest) -> dict:
-        gemini_body = to_gemini_request(request)
-        model_key = request.model.split("/")[-1]
-        payload: dict = {
-            "model": model_key,
-            "request": gemini_body,
-            "userAgent": "GeminiCLI",
-        }
-        if self.project_id:
-            payload["project"] = self.project_id
-        return payload
-
-    async def _complete_api(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
-        headers = await self._get_headers()
-        payload = self._build_payload(request)
-        model_name = f"gemini/{request.model.split('/', 1)[-1]}"
-
-        resp = await self._client.post(
-            f"{self.api_base}/v1internal:generateContent",
-            headers=headers,
-            json=payload,
-        )
-        if resp.status_code != 200:
-            raise ProviderError(
-                f"Gemini API error: {resp.status_code} {resp.text[:500]}",
-                status_code=resp.status_code,
-                retryable=resp.status_code in (429, 500, 502, 503),
-                provider=self.name,
-            )
-        return from_gemini_response(resp.json(), model=model_name)
-
-    async def _stream_api(
-        self, request: ChatCompletionRequest
-    ) -> AsyncIterator[ChatCompletionChunk]:
-        headers = await self._get_headers()
-        payload = self._build_payload(request)
-        model_name = f"gemini/{request.model.split('/', 1)[-1]}"
-        state = StreamState(model=model_name)
-
-        url = f"{self.api_base}/v1internal:streamGenerateContent?alt=sse"
-
-        async with self._client.stream("POST", url, headers=headers, json=payload) as resp:
-            if resp.status_code != 200:
-                body = await resp.aread()
-                raise ProviderError(
-                    f"Gemini stream error: {resp.status_code} {body.decode()[:500]}",
-                    status_code=resp.status_code,
-                    retryable=resp.status_code in (429, 500, 502, 503),
-                    provider=self.name,
-                )
-
-            yield make_role_chunk(state)
-
-            async for event in parse_sse(resp.aiter_lines()):
-                if event.data == "[DONE]":
-                    break
                 try:
-                    data = json.loads(event.data)
-                except json.JSONDecodeError:
-                    continue
+                    await asyncio.wait_for(proc.wait(), timeout=10)
+                except asyncio.TimeoutError:
+                    finish_reason = "length"
+            finally:
+                # Runs on normal exit, ProviderError, and client disconnect
+                # (GeneratorExit) alike: never leave an orphan CLI process.
+                if proc.returncode is None:
+                    proc.kill()
+                    await proc.wait()
 
-                candidates = data.get("candidates", [])
-                for candidate in candidates:
-                    content = candidate.get("content", {})
-                    for part in content.get("parts", []):
-                        text = part.get("text")
-                        if text:
-                            yield make_content_chunk(text, state)
-
-        yield make_final_chunk(state)
-
-    # ------------------------------------------------------------------
-    # Public interface (routes to CLI or API based on mode)
-    # ------------------------------------------------------------------
-
-    async def complete(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
-        if self.mode == "cli":
-            return await self._complete_cli(request)
-        return await self._complete_api(request)
-
-    async def stream(
-        self, request: ChatCompletionRequest
-    ) -> AsyncIterator[ChatCompletionChunk]:
-        if self.mode == "cli":
-            async for chunk in self._stream_cli(request):
-                yield chunk
-        else:
-            async for chunk in self._stream_api(request):
-                yield chunk
+        yield make_final_chunk(state, finish_reason=finish_reason)
 
     async def list_models(self) -> list[ModelInfo]:
         return [

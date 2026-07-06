@@ -79,24 +79,6 @@ class ModelRouter:
         async for chunk in provider.stream(req):
             yield chunk
 
-    def _find_fallback(
-        self, model: str, exclude: str
-    ) -> tuple[BaseProvider, str] | None:
-        """Find a fallback provider for the given model."""
-        model_key = model.split("/")[-1] if "/" in model else model
-
-        # Try to find the same model in another provider
-        for name, provider in get_all_providers().items():
-            if name == exclude or not provider.is_healthy():
-                continue
-            # Check if this provider might serve a compatible model
-            if "claude" in model_key and name in ("antigravity", "claude"):
-                return provider, model_key
-            if "gemini" in model_key and name in ("antigravity", "gemini"):
-                return provider, model_key
-
-        return None
-
     async def list_all_models(self) -> list[ModelInfo]:
         """Aggregate models from all active providers."""
         models = []

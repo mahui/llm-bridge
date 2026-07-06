@@ -19,33 +19,22 @@ class ServerConfig(BaseModel):
     api_key: str = ""
 
 
-class AntigravityProviderConfig(BaseModel):
-    enabled: bool = True
-    api_base: str = "https://cloudcode-pa.googleapis.com"
-    project_id: str = ""
-
-
 class ClaudeProviderConfig(BaseModel):
     enabled: bool = True
-    mode: str = "cli"
     cli_path: str = "claude"
-    api_key: str = ""
 
 
 class CodexProviderConfig(BaseModel):
     enabled: bool = True
-    api_base: str = "https://api.openai.com"
-    auth_file: str = "~/.codex/auth.json"
+    cli_path: str = "codex"
 
 
 class GeminiProviderConfig(BaseModel):
     enabled: bool = True
-    api_base: str = "https://cloudcode-pa.googleapis.com"
-    auth_file: str = "~/.gemini/oauth_creds.json"
+    cli_path: str = "gemini"
 
 
 class ProvidersConfig(BaseModel):
-    antigravity: AntigravityProviderConfig = Field(default_factory=AntigravityProviderConfig)
     claude: ClaudeProviderConfig = Field(default_factory=ClaudeProviderConfig)
     codex: CodexProviderConfig = Field(default_factory=CodexProviderConfig)
     gemini: GeminiProviderConfig = Field(default_factory=GeminiProviderConfig)
@@ -56,21 +45,8 @@ class RoutingConfig(BaseModel):
     aliases: dict[str, str] = Field(default_factory=dict)
 
 
-class ProviderRateLimit(BaseModel):
-    rpm: int = 60
-    max_concurrent: int = 3
-
-
-class RateLimitingConfig(BaseModel):
-    enabled: bool = True
-    default_rpm: int = 60
-    per_provider: dict[str, ProviderRateLimit] = Field(default_factory=dict)
-
-
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    track_usage: bool = True
-    usage_log: str = "~/.llm-bridge/usage.jsonl"
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +58,6 @@ class BridgeConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
-    rate_limiting: RateLimitingConfig = Field(default_factory=RateLimitingConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
 

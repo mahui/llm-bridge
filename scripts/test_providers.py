@@ -16,7 +16,6 @@ TEST_MODELS = [
     ("claude", "claude/claude-sonnet-4-6"),
     ("codex", "codex/gpt-5.4-mini"),
     ("gemini", "gemini/gemini-2.5-flash"),
-    ("antigravity", "antigravity/claude-sonnet-4-6"),
 ]
 
 
@@ -51,7 +50,10 @@ def test_non_streaming(client: OpenAI, provider: str, model: str) -> bool:
         print(f"    Response: {content!r}")
         print(f"    Usage: {usage.prompt_tokens}in/{usage.completion_tokens}out")
         print(f"    Time: {elapsed:.1f}s")
-        print(f"    ✅ PASS")
+        if not content:
+            print("    ❌ FAIL: empty response")
+            return False
+        print("    ✅ PASS")
         return True
     except Exception as e:
         msg = str(e)
@@ -95,9 +97,9 @@ def test_streaming(client: OpenAI, provider: str, model: str) -> bool:
         print(f"    Chunks: {len(chunks)}")
         print(f"    Time: {elapsed:.1f}s")
         if not content:
-            print(f"    ❌ FAIL: empty response (0 content chunks)")
+            print("    ❌ FAIL: empty response (0 content chunks)")
             return False
-        print(f"    ✅ PASS")
+        print("    ✅ PASS")
         return True
     except Exception as e:
         msg = str(e)

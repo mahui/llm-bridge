@@ -1,58 +1,41 @@
-"""Auth status and login endpoints."""
+"""Auth status endpoints.
+
+Authentication is delegated entirely to each provider's official CLI/SDK
+harness — this gateway never reads or refreshes OAuth tokens itself.
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from fastapi import APIRouter
 
-from fastapi import APIRouter, Request
-
-if TYPE_CHECKING:
-    from llm_bridge.auth.manager import AuthManager
+from llm_bridge.providers import get_all_providers
 
 router = APIRouter(prefix="/auth")
 
+LOGIN_HINTS = {
+    "claude": "Run `claude` in a terminal and complete login (or `claude setup-token`).",
+    "codex": "Run `codex login` in a terminal.",
+    "gemini": "Run `gemini` in a terminal and complete login.",
+}
+
 
 @router.get("/status")
-async def auth_status(request: Request):
-    """Return authentication status for all providers."""
-    auth_manager: AuthManager = request.app.state.auth_manager
-    return auth_manager.get_status()
+async def auth_status():
+    """Report per-provider harness availability (auth lives in each CLI)."""
+    result = {}
+    for name, provider in get_all_providers().items():
+        result[name] = {
+            "status": provider.status.value,
+            "healthy": provider.is_healthy(),
+            "login_hint": LOGIN_HINTS.get(name, ""),
+        }
+    return result
 
 
 @router.post("/login/{provider}")
-async def login(provider: str, request: Request):
-    """Initiate login flow for a provider."""
-    if provider == "antigravity":
-        from llm_bridge.auth.oauth import GoogleOAuthPKCE
-
-        oauth = GoogleOAuthPKCE()
-        auth_url, code_verifier, state = oauth.generate_auth_url()
-        # Store state for callback verification
-        request.app.state.oauth_pending = {
-            "code_verifier": code_verifier,
-            "state": state,
-            "provider": provider,
-        }
-        return {"auth_url": auth_url, "state": state}
-    elif provider in ("codex", "claude", "gemini"):
-        cli_cmds = {
-            "codex": "codex",
-            "claude": "claude",
-            "gemini": "gemini",
-        }
-        return {
-            "message": f"Please run `{cli_cmds[provider]}` in terminal to login first, "
-            "then restart the server to detect credentials."
-        }
-    return {"error": f"Unknown provider: {provider}"}
-
-
-@router.post("/refresh/{provider}")
-async def refresh(provider: str, request: Request):
-    """Force credential refresh for a provider."""
-    auth_manager: AuthManager = request.app.state.auth_manager
-    try:
-        await auth_manager.get_access_token(provider)
-        return {"status": "ok", "provider": provider}
-    except Exception as e:
-        return {"status": "error", "provider": provider, "message": str(e)}
+async def login(provider: str):
+    """Point the user at the provider CLI's own login flow."""
+    hint = LOGIN_HINTS.get(provider)
+    if hint is None:
+        return {"error": f"Unknown provider: {provider}"}
+    return {"message": f"{hint} Then restart the server."}

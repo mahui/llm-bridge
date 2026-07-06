@@ -90,8 +90,15 @@ class CodexProvider(BaseProvider):
     def _resolve_model(self, model: str) -> str:
         return model.split("/")[-1]
 
-    async def _run_cli(self, prompt: str, model: str) -> asyncio.subprocess.Process:
-        """Start a Codex CLI subprocess in exec mode. Prompt via stdin."""
+    async def _run_cli(
+        self, prompt: str, model: str, capture_stderr: bool
+    ) -> asyncio.subprocess.Process:
+        """Start a Codex CLI subprocess in exec mode. Prompt via stdin.
+
+        The streaming path never drains stderr, so it must be DEVNULL there —
+        a full pipe buffer would deadlock the child. communicate() drains it,
+        so the non-streaming path can capture it for error messages.
+        """
         args = [
             self.cli_path, "exec",
             "--json",
@@ -104,9 +111,10 @@ class CodexProvider(BaseProvider):
             *args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE if capture_stderr else asyncio.subprocess.DEVNULL,
         )
         proc.stdin.write(prompt.encode())
+        await proc.stdin.drain()
         proc.stdin.close()
         return proc
 
@@ -115,7 +123,7 @@ class CodexProvider(BaseProvider):
         model_name = f"codex/{request.model.split('/', 1)[-1]}"
 
         async with self._semaphore:
-            proc = await self._run_cli(prompt, request.model)
+            proc = await self._run_cli(prompt, request.model, capture_stderr=True)
 
             try:
                 stdout, stderr = await asyncio.wait_for(
@@ -123,6 +131,7 @@ class CodexProvider(BaseProvider):
                 )
             except asyncio.TimeoutError:
                 proc.kill()
+                await proc.wait()
                 raise ProviderError(
                     "Codex CLI timed out", status_code=504,
                     retryable=True, provider=self.name,
@@ -177,12 +186,13 @@ class CodexProvider(BaseProvider):
         model_name = f"codex/{request.model.split('/', 1)[-1]}"
         state = StreamState(model=model_name)
 
+        finish_reason = "stop"
+
         async with self._semaphore:
-            proc = await self._run_cli(prompt, request.model)
-
-            yield make_role_chunk(state)
-
+            proc = await self._run_cli(prompt, request.model, capture_stderr=False)
             try:
+                yield make_role_chunk(state)
+
                 async for raw_line in proc.stdout:
                     line = raw_line.decode().strip()
                     if not line:
@@ -203,11 +213,18 @@ class CodexProvider(BaseProvider):
                     elif etype == "turn.completed":
                         break
 
-                await asyncio.wait_for(proc.wait(), timeout=10)
-            except asyncio.TimeoutError:
-                proc.kill()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=10)
+                except asyncio.TimeoutError:
+                    finish_reason = "length"
+            finally:
+                # Runs on normal exit, errors, and client disconnect
+                # (GeneratorExit) alike: never leave an orphan CLI process.
+                if proc.returncode is None:
+                    proc.kill()
+                    await proc.wait()
 
-        yield make_final_chunk(state)
+        yield make_final_chunk(state, finish_reason=finish_reason)
 
     async def list_models(self) -> list[ModelInfo]:
         return [

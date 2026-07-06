@@ -1,8 +1,9 @@
-"""FastAPI middleware for auth, rate limiting, logging, and error handling."""
+"""FastAPI middleware for auth, logging, and error handling."""
 
 from __future__ import annotations
 
 import logging
+import secrets
 import time
 
 from fastapi import Request, Response
@@ -40,7 +41,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         else:
             token = ""
 
-        if token != api_key:
+        if not secrets.compare_digest(token.encode(), api_key.encode()):
             err = ErrorResponse(
                 error=ErrorDetail(message="Invalid API key", type="authentication_error")
             )

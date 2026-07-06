@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.5/purify.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -631,6 +632,13 @@ function switchConv(id) {
 
 function deleteConv(id, e) {
   e.stopPropagation();
+  // Abort any in-flight stream for this conversation before dropping it,
+  // otherwise the request keeps running against a detached object.
+  const controller = streamingConvs.get(id);
+  if (controller) {
+    controller.abort();
+    streamingConvs.delete(id);
+  }
   conversations = conversations.filter(c => c.id !== id);
   saveConvs();
   if (currentConvId === id) {
@@ -701,12 +709,22 @@ function renderMarkdown(text) {
     const lang = (typeof obj === 'object' ? obj.lang : arguments[1]) || '';
     const escaped = escapeHtml(code);
     const langLabel = lang || 'code';
-    return `<pre><div class="code-header"><span>${langLabel}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div><code class="language-${lang}">${escaped}</code></pre>`;
+    return `<pre><div class="code-header"><span>${langLabel}</span><button class="copy-btn">Copy</button></div><code class="language-${lang}">${escaped}</code></pre>`;
   };
 
   marked.setOptions({ renderer, breaks: true, gfm: true });
-  return marked.parse(text);
+  // Model output is untrusted input: sanitize before it hits innerHTML.
+  // The copy button works via event delegation, so no inline handlers needed.
+  return DOMPurify.sanitize(marked.parse(text));
 }
+
+// Delegated handler: copy buttons are re-created on every render, inline
+// onclick would be stripped by DOMPurify anyway.
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.classList && e.target.classList.contains('copy-btn')) {
+    copyCode(e.target);
+  }
+});
 
 function highlightAll() {
   document.querySelectorAll('pre code').forEach(block => {
