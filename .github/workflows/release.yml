@@ -33,7 +33,10 @@ jobs:
       - name: Create GitHub Release with artifacts
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          # uv build drops a .gitignore into dist/ — only ship the artifacts
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
           generate_release_notes: true
 
   # Optional PyPI publishing via trusted publishing.
