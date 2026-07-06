@@ -5,9 +5,10 @@ Local multi-model AI proxy gateway for **personal use**. Unifies Claude Code, Co
 > **Scope**: chat-only, single-user, localhost. Tool calling and multi-modal
 > inputs are not supported. All providers go through official CLI/SDK
 > harnesses — this gateway never extracts or replays OAuth tokens, which the
-> providers have banned for third-party use (Anthropic enforced this in
-> April 2026; note that headless Claude usage draws from monthly Agent SDK
-> credits, not the interactive subscription pool).
+> providers have banned for third-party use (Anthropic added server-side
+> blocks in January 2026 and fully enforced the ban on April 4, 2026; note
+> that headless Claude usage draws from monthly Agent SDK credits, not the
+> interactive subscription pool).
 
 ## Architecture
 
@@ -28,7 +29,7 @@ Agent    CLI       CLI
 | Provider | Harness | Models |
 |----------|---------|--------|
 | Claude | claude-agent-sdk (bundled CLI) | claude-fable-5, claude-opus-4-8, claude-sonnet-5, claude-haiku-4-5 |
-| Codex | `codex exec --json` subprocess | gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, ... |
+| Codex | `codex exec --json` subprocess | gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.3-codex-spark |
 | Gemini | `gemini -p - --output-format stream-json` subprocess | gemini-3.1-pro-preview, gemini-2.5-pro, ... |
 
 ## Quick Start
@@ -124,7 +125,8 @@ Built-in ChatGPT-style interface at `http://localhost:8787`:
 - Multiple concurrent conversations
 - Conversation history (localStorage)
 - Settings page (gear icon): API key for protected servers, default model for
-  new chats, global system prompt, and a provider status panel with login hints
+  new chats, global system prompt, reasoning-effort level, and a provider
+  status panel with login hints
 
 ## Management Endpoints
 
@@ -203,6 +205,10 @@ uv run python scripts/test_providers.py --stream-only
 ## Known Limitations
 
 - **Chat-only**: `tools` / function calling and multi-modal message content are not supported.
+- Supports the OpenAI `reasoning_effort` request field (minimal/low/medium/high/xhigh/max,
+  mapped to each provider's native range); honored by claude (default medium) and codex,
+  ignored by gemini. Other sampling params (`temperature`, `max_tokens`, ...) are accepted
+  but not forwarded — CLI harnesses don't expose them.
 - CLI subprocess mode has higher latency than direct API calls (~3-8s per request for codex/gemini).
 - Codex runs with `--ignore-user-config` by default (skips `~/.codex` skills/plugins, which
   otherwise add ~20k input tokens per request); set `providers.codex.ignore_user_config: false`

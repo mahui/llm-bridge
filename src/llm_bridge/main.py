@@ -20,18 +20,23 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Setup logging
-    log_level = logging.DEBUG if args.debug else logging.INFO
+    # Load config first so logging.level applies; --debug overrides it
+    config = load_config(args.config)
+    log_level = logging.DEBUG if args.debug else config.logging.level.upper()
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # Load config
-    config = load_config(args.config)
-    host = args.host or config.server.host
-    port = args.port or config.server.port
+    # Write CLI overrides back so downstream consumers (startup log,
+    # CORS origin list) see the effective host/port.
+    if args.host:
+        config.server.host = args.host
+    if args.port:
+        config.server.port = args.port
+    host = config.server.host
+    port = config.server.port
 
     # Create app
     app = create_app(config)

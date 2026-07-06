@@ -59,7 +59,16 @@ def _read_models_cache() -> list[str] | None:
 
 MAX_CONCURRENT = 2
 
-EFFORT_LEVELS = {"low", "medium", "high", "xhigh"}
+# Request value -> codex model_reasoning_effort (codex supports
+# low/medium/high/xhigh; map OpenAI's minimal->low and SDK-style max->xhigh).
+EFFORT_MAP = {
+    "minimal": "low",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "xhigh": "xhigh",
+    "max": "xhigh",
+}
 
 
 def _format_prompt(request: ChatCompletionRequest) -> str:
@@ -130,8 +139,9 @@ class CodexProvider(BaseProvider):
         ]
         if self.ignore_user_config:
             args.append("--ignore-user-config")
-        if effort in EFFORT_LEVELS:
-            args += ["-c", f'model_reasoning_effort="{effort}"']
+        mapped_effort = EFFORT_MAP.get(effort or "")
+        if mapped_effort:
+            args += ["-c", f'model_reasoning_effort="{mapped_effort}"']
         args += [
             "-m", self._resolve_model(model),
             "-",  # read prompt from stdin

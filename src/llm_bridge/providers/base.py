@@ -48,7 +48,7 @@ class BaseProvider(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Provider identifier (e.g., 'antigravity', 'claude', 'codex', 'gemini')."""
+        """Provider identifier (e.g., 'claude', 'codex', 'gemini')."""
 
     @property
     def status(self) -> ProviderStatus:

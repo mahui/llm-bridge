@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -32,9 +32,10 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
     user: str | None = None
-    # OpenAI-standard reasoning depth: "low" | "medium" | "high" | "xhigh".
-    # Honored by the claude and codex providers; ignored by gemini.
-    reasoning_effort: str | None = None
+    # OpenAI-standard reasoning depth. Honored by claude/codex; ignored by
+    # gemini. Providers map values outside their native range to the nearest
+    # supported level (e.g. minimal->low). Invalid values are rejected.
+    reasoning_effort: Literal["minimal", "low", "medium", "high", "xhigh", "max"] | None = None
 
 
 # ---------------------------------------------------------------------------
