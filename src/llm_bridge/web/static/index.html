@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljsDark">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljsLight" disabled>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.5/purify.min.js"></script>
@@ -31,9 +32,39 @@
   --gemini: #8aa8f8;
   --ok: #7bc47f;
   --err: #e05f5f;
+  --glow: rgba(232,163,61,0.05);
+  --grid: rgba(255,255,255,0.012);
+  --topbar-bg: rgba(11,13,18,0.85);
+  --scrim: rgba(5,6,9,0.7);
+  --send-ink: #16130b;
   --mono: "IBM Plex Mono", "SF Mono", Menlo, monospace;
   --body: "IBM Plex Sans", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   --sidebar-w: 264px;
+}
+
+/* Light theme: same instrument language on warm paper */
+:root[data-theme="light"] {
+  --bg0: #f4f1ea;
+  --bg1: #ece8dd;
+  --bg2: #e2ddcf;
+  --bg3: #d5cfbe;
+  --ink: #2a2722;
+  --ink-dim: #5f5a4e;
+  --ink-faint: #97907d;
+  --line: #d3ccba;
+  --line-soft: #dfd9c9;
+  --amber: #b0781c;
+  --amber-soft: rgba(176, 120, 28, 0.13);
+  --claude: #c05a38;
+  --codex: #0f7d92;
+  --gemini: #4a6fd4;
+  --ok: #3e8a44;
+  --err: #c04040;
+  --glow: rgba(176,120,28,0.06);
+  --grid: rgba(0,0,0,0.022);
+  --topbar-bg: rgba(244,241,234,0.85);
+  --scrim: rgba(60,55,45,0.45);
+  --send-ink: #fdfbf6;
 }
 
 html, body { height: 100%; }
@@ -54,9 +85,9 @@ body::before {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 40% at 50% -10%, rgba(232,163,61,0.05), transparent),
-    repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,255,255,0.012) 31px 32px),
-    repeating-linear-gradient(90deg, transparent 0 31px, rgba(255,255,255,0.012) 31px 32px);
+    radial-gradient(ellipse 80% 40% at 50% -10%, var(--glow), transparent),
+    repeating-linear-gradient(0deg, transparent 0 31px, var(--grid) 31px 32px),
+    repeating-linear-gradient(90deg, transparent 0 31px, var(--grid) 31px 32px);
   z-index: 0;
 }
 
@@ -237,7 +268,7 @@ body::before {
   border-bottom: 1px solid var(--line);
   gap: 12px;
   flex-shrink: 0;
-  background: rgba(11,13,18,0.85);
+  background: var(--topbar-bg);
   backdrop-filter: blur(8px);
 }
 
@@ -285,6 +316,21 @@ body::before {
   letter-spacing: 0.05em;
 }
 .latency-readout b { color: var(--ink-dim); font-weight: 500; }
+
+.theme-btn {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  cursor: pointer;
+  padding: 5px 7px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s;
+  font-size: 13px;
+  line-height: 1;
+}
+.theme-btn:hover { color: var(--amber); border-color: var(--ink-faint); }
 
 .status-light {
   width: 9px; height: 9px;
@@ -540,7 +586,7 @@ body::before {
   border-radius: 7px;
   background: var(--amber);
   border: none;
-  color: #16130b;
+  color: var(--send-ink);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -684,7 +730,7 @@ body::before {
   background: var(--amber);
   border: none;
   border-radius: 6px;
-  color: #16130b;
+  color: var(--send-ink);
   font-family: var(--mono);
   font-size: 12.5px;
   font-weight: 600;
@@ -724,7 +770,7 @@ body::before {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(5,6,9,0.7);
+  background: var(--scrim);
   backdrop-filter: blur(3px);
   z-index: 200;
   align-items: center;
@@ -829,7 +875,7 @@ body::before {
   transition: all 0.15s;
 }
 .btn:hover { background: var(--bg3); }
-.btn.primary { background: var(--amber); border-color: var(--amber); color: #16130b; font-weight: 600; }
+.btn.primary { background: var(--amber); border-color: var(--amber); color: var(--send-ink); font-weight: 600; }
 .btn.primary:hover { filter: brightness(1.1); }
 .btn.small { padding: 3px 10px; font-size: 11px; }
 
@@ -909,6 +955,7 @@ body::before {
     </div>
     <div class="topbar-spacer"></div>
     <span class="latency-readout" id="latencyReadout"></span>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="切换日间/夜间模式"></button>
     <div class="status-light" id="statusDot" title="Server status"></div>
   </div>
 
@@ -1110,6 +1157,25 @@ document.getElementById('settingsOverlay').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeSettings();
 });
 
+// ===== Theme =====
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.getElementById('hljsDark').disabled = theme === 'light';
+  document.getElementById('hljsLight').disabled = theme !== 'light';
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = theme === 'light' ? '☾' : '☀';
+  localStorage.setItem('llm-bridge-theme', theme);
+}
+function toggleTheme() {
+  const cur = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  applyTheme(cur === 'light' ? 'dark' : 'light');
+}
+function initTheme() {
+  const saved = localStorage.getItem('llm-bridge-theme');
+  const preferred = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  applyTheme(preferred);
+}
+
 // ===== Toast =====
 function toast(msg, type = 'error') {
   const box = document.getElementById('toasts');
@@ -1195,6 +1261,7 @@ function onModelChange(save = true) {
   const color = PROVIDER_COLORS[prov] || 'var(--ink-faint)';
   signal.style.background = color;
   signal.style.boxShadow = `0 0 6px ${color}`;
+  signal.title = `当前模型路由到 ${prov} provider（信号色）`;
   if (save) {
     localStorage.setItem('llm-bridge-model', model);
     const conv = getCurrentConv();
@@ -1788,6 +1855,7 @@ function closeSidebar() {
 }
 
 // ===== Start =====
+initTheme();
 init();
 </script>
 </body>
