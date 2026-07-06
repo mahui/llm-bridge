@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.png" alt="LLM-Bridge logo" width="380">
+</p>
+
 # LLM ⇌ BRIDGE
 
 **把你的 AI 订阅统一成一个 API。** 本地个人网关：Claude Code、Codex、Antigravity CLI 汇聚到一个 OpenAI 兼容端点，自带聊天 UI。

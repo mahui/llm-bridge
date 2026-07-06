@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.png" alt="LLM-Bridge logo" width="380">
+</p>
+
 # LLM ⇌ BRIDGE
 
 **Your AI subscriptions, one API.** A local personal gateway that unifies Claude Code, Codex, and the Antigravity CLI behind a single OpenAI-compatible endpoint — with a built-in chat UI.
