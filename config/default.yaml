@@ -1,0 +1,47 @@
+server:
+  host: "127.0.0.1"
+  port: 8787
+  api_key: ""  # Leave empty to disable API key auth; or set LLM_BRIDGE_API_KEY env var
+
+providers:
+  antigravity:
+    enabled: true
+    api_base: "https://cloudcode-pa.googleapis.com"
+    project_id: ""  # Auto-detected from Gemini CLI creds if empty
+
+  claude:
+    enabled: true
+    mode: "cli"  # "cli" or "api"
+    cli_path: "claude"
+
+  codex:
+    enabled: true
+    api_base: "https://api.openai.com"
+    auth_file: "~/.codex/auth.json"
+
+  gemini:
+    enabled: true
+    api_base: "https://cloudcode-pa.googleapis.com"
+    auth_file: "~/.gemini/oauth_creds.json"
+
+routing:
+  default_model: "claude/claude-sonnet-4-6"
+  aliases:
+    sonnet: "claude/claude-sonnet-4-6"
+    opus: "claude/claude-opus-4-6"
+    gemini-pro: "gemini/gemini-2.5-pro"
+    flash: "gemini/gemini-2.5-flash"
+
+rate_limiting:
+  enabled: true
+  default_rpm: 60
+  per_provider:
+    antigravity: { rpm: 30, max_concurrent: 3 }
+    codex: { rpm: 20, max_concurrent: 2 }
+    claude: { rpm: 10, max_concurrent: 1 }
+    gemini: { rpm: 15, max_concurrent: 2 }
+
+logging:
+  level: "INFO"
+  track_usage: true
+  usage_log: "~/.llm-bridge/usage.jsonl"
