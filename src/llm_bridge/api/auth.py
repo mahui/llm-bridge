@@ -15,7 +15,7 @@ router = APIRouter(prefix="/auth")
 LOGIN_HINTS = {
     "claude": "Run `claude` in a terminal and complete login (or `claude setup-token`).",
     "codex": "Run `codex login` in a terminal.",
-    "gemini": "Run `gemini` in a terminal and complete login.",
+    "agy": "Run `agy` (Antigravity CLI) in a terminal and complete login.",
 }
 
 

@@ -1,6 +1,6 @@
 # LLM-Bridge
 
-Local multi-model AI proxy gateway for **personal use**. Unifies Claude Code, Codex, and Gemini CLI behind a single OpenAI-compatible API with a built-in chat UI, reusing each tool's own subscription authentication.
+Local multi-model AI proxy gateway for **personal use**. Unifies Claude Code, Codex, and the Antigravity CLI behind a single OpenAI-compatible API with a built-in chat UI, reusing each tool's own subscription authentication.
 
 > **Scope**: chat-only, single-user, localhost. Tool calling and multi-modal
 > inputs are not supported. All providers go through official CLI/SDK
@@ -21,16 +21,16 @@ Clients (Web UI / curl / OpenAI SDK)
           |
   +-------+---------+
   |       |         |
-Claude   Codex    Gemini
+Claude   Codex  Antigravity
 Agent    CLI       CLI
- SDK   (exec)   (stream-json)
+ SDK   (exec)    (agy -p)
 ```
 
 | Provider | Harness | Models |
 |----------|---------|--------|
 | Claude | claude-agent-sdk (bundled CLI) | claude-fable-5, claude-opus-4-8, claude-sonnet-5, claude-haiku-4-5 |
 | Codex | `codex exec --json` subprocess | gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.3-codex-spark |
-| Gemini | `gemini -p - --output-format stream-json` subprocess | gemini-3.1-pro-preview, gemini-2.5-pro, ... |
+| Antigravity | `agy -p -` subprocess | gemini-3.5-flash*, gemini-3.1-pro*, claude-*-thinking, gpt-oss-120b (dynamic via `agy models`) |
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ Agent    CLI       CLI
 
 - Python 3.12+
 - [uv](https://github.com/astral-sh/uv)
-- At least one CLI tool logged in: `claude`, `codex`, or `gemini`
+- At least one CLI tool logged in: `claude`, `codex`, or `agy` (Antigravity)
 
 ### Install & Run
 
@@ -91,7 +91,8 @@ Models use `provider/model-name` format:
 claude/claude-fable-5          # Claude Fable 5 via Agent SDK
 claude/claude-sonnet-5         # Claude Sonnet 5 via Agent SDK
 codex/gpt-5.4                  # GPT-5.4 via Codex CLI
-gemini/gemini-2.5-pro          # Gemini 2.5 Pro via CLI
+agy/gemini-3.5-flash-medium    # Gemini via Antigravity CLI
+agy/claude-sonnet-4.6-thinking # Claude (thinking) via Antigravity CLI
 ```
 
 Aliases (configurable in `config/default.yaml`): `fable`, `opus`, `sonnet`, `haiku`, `gemini-pro`, `flash`.
@@ -149,7 +150,7 @@ server:
 providers:
   claude: { enabled: true }
   codex: { enabled: true }
-  gemini: { enabled: true }
+  agy: { enabled: true }
 
 routing:
   default_model: "claude/claude-sonnet-5"
@@ -171,7 +172,7 @@ agent-proxy/
 │   │   ├── base.py             # Provider abstract base class
 │   │   ├── claude.py           # claude-agent-sdk adapter
 │   │   ├── codex.py            # Codex CLI adapter
-│   │   └── gemini.py           # Gemini CLI adapter
+│   │   └── agy.py              # Antigravity CLI adapter
 │   ├── convert/
 │   │   ├── openai.py           # OpenAI format (canonical)
 │   │   └── streaming.py        # Streaming chunk utilities
@@ -207,16 +208,18 @@ uv run python scripts/test_providers.py --stream-only
 - **Chat-only**: `tools` / function calling and multi-modal message content are not supported.
 - Supports the OpenAI `reasoning_effort` request field (minimal/low/medium/high/xhigh/max,
   mapped to each provider's native range); honored by claude (default medium) and codex,
-  ignored by gemini. Other sampling params (`temperature`, `max_tokens`, ...) are accepted
+  ignored by agy (its models encode depth in their variant names). Other sampling params (`temperature`, `max_tokens`, ...) are accepted
   but not forwarded — CLI harnesses don't expose them.
-- CLI subprocess mode has higher latency than direct API calls (~3-8s per request for codex/gemini).
+- CLI subprocess mode has higher latency than direct API calls (~3-8s per request for codex/agy).
 - Codex runs with `--ignore-user-config` by default (skips `~/.codex` skills/plugins, which
   otherwise add ~20k input tokens per request); set `providers.codex.ignore_user_config: false`
   to load your global Codex config.
 - Model lists: Codex reads the CLI's own `models_cache.json`; Claude uses the free Models API
   when `providers.claude.api_key` / `ANTHROPIC_API_KEY` is set (never used for inference),
-  otherwise a hardcoded fallback; Gemini is hardcoded (no headless list command).
-- Gemini free tier has strict rate limits (429).
+  otherwise a hardcoded fallback; Antigravity is fully dynamic via `agy models`.
+- Antigravity output is plain text: no token usage accounting, chunk-level (not token-level)
+  streaming, and reasoning depth is chosen via model variants (`-low/-medium/-high`) rather
+  than the `reasoning_effort` field.
 - Headless Claude usage is billed against monthly Agent SDK credits, not the interactive Claude Code pool.
 
 ## License

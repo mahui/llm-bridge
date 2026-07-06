@@ -21,9 +21,9 @@ from llm_bridge.gateway.middleware import (
 )
 from llm_bridge.gateway.router import ModelRouter
 from llm_bridge.providers import register_provider
+from llm_bridge.providers.agy import AgyProvider
 from llm_bridge.providers.claude import ClaudeProvider
 from llm_bridge.providers.codex import CodexProvider
-from llm_bridge.providers.gemini import GeminiProvider
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +49,9 @@ async def lifespan(app: FastAPI):
         )
         providers_to_init.append(("codex", cx))
 
-    if config.providers.gemini.enabled:
-        gm = GeminiProvider(cli_path=config.providers.gemini.cli_path)
-        providers_to_init.append(("gemini", gm))
+    if config.providers.agy.enabled:
+        ag = AgyProvider(cli_path=config.providers.agy.cli_path)
+        providers_to_init.append(("agy", ag))
 
     for name, provider in providers_to_init:
         try:

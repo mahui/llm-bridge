@@ -17,9 +17,9 @@ providers:
     enabled: true
     cli_path: "codex"
     ignore_user_config: true   # skip ~/.codex skills/plugins (saves ~20k input tokens/request)
-  gemini:
+  agy:
     enabled: true
-    cli_path: "gemini"
+    cli_path: "agy"   # Antigravity CLI; adjust if installed as agy-cli
 
 routing:
   default_model: "claude/claude-sonnet-5"
@@ -28,8 +28,8 @@ routing:
     opus: "claude/claude-opus-4-8"
     sonnet: "claude/claude-sonnet-5"
     haiku: "claude/claude-haiku-4-5"
-    gemini-pro: "gemini/gemini-2.5-pro"
-    flash: "gemini/gemini-2.5-flash"
+    gemini-pro: "agy/gemini-3.1-pro-high"
+    flash: "agy/gemini-3.5-flash-medium"
 
 logging:
   level: "INFO"

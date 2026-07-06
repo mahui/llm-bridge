@@ -1029,7 +1029,7 @@ body::before {
 <script>
 // ===== State =====
 const API_BASE = window.location.origin;
-const PROVIDER_COLORS = { claude: 'var(--claude)', codex: 'var(--codex)', gemini: 'var(--gemini)' };
+const PROVIDER_COLORS = { claude: 'var(--claude)', codex: 'var(--codex)', agy: 'var(--gemini)' };
 let conversations = JSON.parse(localStorage.getItem('llm-bridge-convs') || '[]');
 let currentConvId = null;
 const streamingConvs = new Map(); // convId -> AbortController

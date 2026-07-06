@@ -36,15 +36,15 @@ class CodexProviderConfig(BaseModel):
     ignore_user_config: bool = True
 
 
-class GeminiProviderConfig(BaseModel):
+class AgyProviderConfig(BaseModel):
     enabled: bool = True
-    cli_path: str = "gemini"
+    cli_path: str = "agy"  # Antigravity CLI (may be installed as agy-cli)
 
 
 class ProvidersConfig(BaseModel):
     claude: ClaudeProviderConfig = Field(default_factory=ClaudeProviderConfig)
     codex: CodexProviderConfig = Field(default_factory=CodexProviderConfig)
-    gemini: GeminiProviderConfig = Field(default_factory=GeminiProviderConfig)
+    agy: AgyProviderConfig = Field(default_factory=AgyProviderConfig)
 
 
 class RoutingConfig(BaseModel):
