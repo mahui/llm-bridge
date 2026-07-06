@@ -24,6 +24,7 @@ LLM-Bridge is a local AI proxy gateway for personal use that wraps three AI CLI 
 
 - **OpenAI Chat Completions format** is the canonical internal format.
 - **Claude** goes through `claude_agent_sdk.query()` (tools disabled, max_turns=1, `include_partial_messages` for token-level streaming). The SDK owns subprocess lifecycle.
+- **`reasoning_effort`** (OpenAI-standard request field, low/medium/high/xhigh) is honored by claude (SDK `effort` option; gateway defaults to medium, NOT the SDK's high) and codex (`-c model_reasoning_effort`); ignored by gemini. UI settings expose it.
 - **Codex/Gemini** use CLI subprocesses. Prompts are sent via **stdin** (not args) to avoid OS argument length limits. Streaming paths use `stderr=DEVNULL` (an undrained pipe deadlocks the child) and a `finally` block that kills the child on client disconnect — keep both invariants when editing.
 - **Per-conversation streaming state** — multiple conversations can stream concurrently in the frontend.
 - Frontend renders model output through **DOMPurify** after marked — model output is untrusted input; never bypass the sanitizer.

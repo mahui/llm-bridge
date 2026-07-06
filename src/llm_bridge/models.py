@@ -32,6 +32,9 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
     user: str | None = None
+    # OpenAI-standard reasoning depth: "low" | "medium" | "high" | "xhigh".
+    # Honored by the claude and codex providers; ignored by gemini.
+    reasoning_effort: str | None = None
 
 
 # ---------------------------------------------------------------------------

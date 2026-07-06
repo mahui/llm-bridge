@@ -616,6 +616,17 @@ body {
         <textarea id="setSystemPrompt" rows="4" placeholder="Optional. Prepended as a system message to every conversation."></textarea>
       </div>
       <div class="setting-field">
+        <label for="setReasoningEffort">Reasoning effort</label>
+        <select id="setReasoningEffort">
+          <option value="">Provider default (medium)</option>
+          <option value="low">low — fastest, minimal thinking</option>
+          <option value="medium">medium — balanced</option>
+          <option value="high">high — deep reasoning</option>
+          <option value="xhigh">xhigh — deepest, slowest</option>
+        </select>
+        <span class="hint">Thinking depth for claude/codex models. Deeper = better on hard problems, but slower and burns more quota. Ignored by gemini.</span>
+      </div>
+      <div class="setting-field">
         <label>Provider status <button class="btn" style="padding:2px 10px;font-size:12px;margin-left:8px" onclick="refreshProviderStatus()">Refresh</button></label>
         <div class="provider-status-list" id="providerStatusList">Loading...</div>
       </div>
@@ -678,7 +689,7 @@ let settings = loadSettingsFromStorage();
 
 // ===== Settings =====
 function loadSettingsFromStorage() {
-  const defaults = { apiKey: '', defaultModel: '', systemPrompt: '' };
+  const defaults = { apiKey: '', defaultModel: '', systemPrompt: '', reasoningEffort: '' };
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem('llm-bridge-settings') || '{}') };
   } catch(e) {
@@ -695,6 +706,7 @@ function authHeaders(extra = {}) {
 function openSettings() {
   document.getElementById('setApiKey').value = settings.apiKey;
   document.getElementById('setSystemPrompt').value = settings.systemPrompt;
+  document.getElementById('setReasoningEffort').value = settings.reasoningEffort;
   populateDefaultModelSelect();
   document.getElementById('settingsOverlay').classList.add('open');
   refreshProviderStatus();
@@ -710,6 +722,7 @@ async function saveSettings() {
   settings.apiKey = document.getElementById('setApiKey').value.trim();
   settings.defaultModel = document.getElementById('setDefaultModel').value;
   settings.systemPrompt = document.getElementById('setSystemPrompt').value.trim();
+  settings.reasoningEffort = document.getElementById('setReasoningEffort').value;
   localStorage.setItem('llm-bridge-settings', JSON.stringify(settings));
   closeSettings();
   // A key change can flip 401s either way: refresh models and health.
@@ -1045,7 +1058,12 @@ async function sendMessage() {
     const resp = await fetch(`${API_BASE}/v1/chat/completions`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ model, messages: apiMessages, stream: true }),
+      body: JSON.stringify({
+        model,
+        messages: apiMessages,
+        stream: true,
+        reasoning_effort: settings.reasoningEffort || undefined,
+      }),
       signal: controller.signal,
     });
 

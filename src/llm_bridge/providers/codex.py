@@ -59,6 +59,8 @@ def _read_models_cache() -> list[str] | None:
 
 MAX_CONCURRENT = 2
 
+EFFORT_LEVELS = {"low", "medium", "high", "xhigh"}
+
 
 def _format_prompt(request: ChatCompletionRequest) -> str:
     """Format OpenAI messages as a single prompt string for Codex CLI."""
@@ -112,7 +114,7 @@ class CodexProvider(BaseProvider):
         return model.split("/")[-1]
 
     async def _run_cli(
-        self, prompt: str, model: str, capture_stderr: bool
+        self, prompt: str, model: str, capture_stderr: bool, effort: str | None = None
     ) -> asyncio.subprocess.Process:
         """Start a Codex CLI subprocess in exec mode. Prompt via stdin.
 
@@ -128,6 +130,8 @@ class CodexProvider(BaseProvider):
         ]
         if self.ignore_user_config:
             args.append("--ignore-user-config")
+        if effort in EFFORT_LEVELS:
+            args += ["-c", f'model_reasoning_effort="{effort}"']
         args += [
             "-m", self._resolve_model(model),
             "-",  # read prompt from stdin
@@ -148,7 +152,10 @@ class CodexProvider(BaseProvider):
         model_name = f"codex/{request.model.split('/', 1)[-1]}"
 
         async with self._semaphore:
-            proc = await self._run_cli(prompt, request.model, capture_stderr=True)
+            proc = await self._run_cli(
+                prompt, request.model, capture_stderr=True,
+                effort=request.reasoning_effort,
+            )
 
             try:
                 stdout, stderr = await asyncio.wait_for(
@@ -214,7 +221,10 @@ class CodexProvider(BaseProvider):
         finish_reason = "stop"
 
         async with self._semaphore:
-            proc = await self._run_cli(prompt, request.model, capture_stderr=False)
+            proc = await self._run_cli(
+                prompt, request.model, capture_stderr=False,
+                effort=request.reasoning_effort,
+            )
             try:
                 yield make_role_chunk(state)
 

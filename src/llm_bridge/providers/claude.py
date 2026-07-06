@@ -71,6 +71,11 @@ FALLBACK_MODELS = [
 MODELS_API_URL = "https://api.anthropic.com/v1/models"
 MODELS_CACHE_TTL = 3600.0  # seconds
 
+EFFORT_LEVELS = {"low", "medium", "high", "xhigh"}
+# The SDK defaults to "high" — too deep (and too credit-hungry) for a chat
+# gateway. Requests can override via the OpenAI reasoning_effort field.
+DEFAULT_EFFORT = "medium"
+
 # Limit concurrent SDK sessions (each spawns a CLI process)
 MAX_CONCURRENT = 2
 
@@ -129,12 +134,18 @@ class ClaudeProvider(BaseProvider):
         self, request: ChatCompletionRequest, system_prompt: str | None, streaming: bool
     ) -> ClaudeAgentOptions:
         model_key = request.model.split("/")[-1]
+        effort = (
+            request.reasoning_effort
+            if request.reasoning_effort in EFFORT_LEVELS
+            else DEFAULT_EFFORT
+        )
         return ClaudeAgentOptions(
             model=MODEL_MAP.get(model_key, model_key),
             system_prompt=system_prompt,
             tools=[],  # pure chat: no built-in tools
             max_turns=1,
             include_partial_messages=streaming,
+            effort=effort,
         )
 
     async def complete(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
