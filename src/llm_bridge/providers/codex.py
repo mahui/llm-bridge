@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+from pathlib import Path
 from typing import AsyncIterator
 
 from llm_bridge.convert.streaming import (
@@ -26,19 +28,34 @@ from llm_bridge.providers.base import BaseProvider, ProviderError, ProviderStatu
 
 logger = logging.getLogger(__name__)
 
-AVAILABLE_MODELS = [
+# Fallback when the CLI's models cache is unavailable (see _read_models_cache)
+FALLBACK_MODELS = [
+    "gpt-5.5",
     "gpt-5.4",
     "gpt-5.4-mini",
-    "gpt-5.3-codex",
     "gpt-5.3-codex-spark",
-    "gpt-5.2-codex",
-    "gpt-5.2",
-    "gpt-5.1-codex",
-    "gpt-5.1",
-    "gpt-5-codex",
-    "gpt-5",
-    "gpt-5-codex-mini",
 ]
+
+
+def _read_models_cache() -> list[str] | None:
+    """Read the model list the Codex CLI maintains itself.
+
+    ~/.codex/models_cache.json is refreshed by the CLI on its own runs
+    (fetched_at/etag) — the closest thing Codex has to a list-models API.
+    visibility=="hide" marks internal models (e.g. codex-auto-review).
+    """
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    cache_path = codex_home / "models_cache.json"
+    try:
+        data = json.loads(cache_path.read_text())
+        slugs = [
+            m["slug"]
+            for m in data.get("models", [])
+            if m.get("visibility") == "list" and m.get("slug")
+        ]
+        return slugs or None
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return None
 
 MAX_CONCURRENT = 2
 
@@ -235,7 +252,8 @@ class CodexProvider(BaseProvider):
         yield make_final_chunk(state, finish_reason=finish_reason)
 
     async def list_models(self) -> list[ModelInfo]:
+        slugs = _read_models_cache() or FALLBACK_MODELS
         return [
             ModelInfo(id=f"codex/{m}", owned_by="codex")
-            for m in AVAILABLE_MODELS
+            for m in slugs
         ]

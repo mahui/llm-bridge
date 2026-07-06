@@ -207,7 +207,9 @@ uv run python scripts/test_providers.py --stream-only
 - Codex runs with `--ignore-user-config` by default (skips `~/.codex` skills/plugins, which
   otherwise add ~20k input tokens per request); set `providers.codex.ignore_user_config: false`
   to load your global Codex config.
-- Codex model list is hardcoded (CLI has no list-models command).
+- Model lists: Codex reads the CLI's own `models_cache.json`; Claude uses the free Models API
+  when `providers.claude.api_key` / `ANTHROPIC_API_KEY` is set (never used for inference),
+  otherwise a hardcoded fallback; Gemini is hardcoded (no headless list command).
 - Gemini free tier has strict rate limits (429).
 - Headless Claude usage is billed against monthly Agent SDK credits, not the interactive Claude Code pool.
 

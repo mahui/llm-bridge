@@ -22,6 +22,10 @@ class ServerConfig(BaseModel):
 class ClaudeProviderConfig(BaseModel):
     enabled: bool = True
     cli_path: str = "claude"
+    # Optional Anthropic API key, used ONLY for the free Models API listing
+    # endpoint (dynamic model list). Inference always goes through the SDK.
+    # Falls back to the ANTHROPIC_API_KEY env var.
+    api_key: str = ""
 
 
 class CodexProviderConfig(BaseModel):

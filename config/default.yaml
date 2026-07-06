@@ -11,6 +11,8 @@ providers:
   claude:
     enabled: true
     cli_path: "claude"   # informational; the bundled Agent SDK CLI is used
+    api_key: ""          # optional; enables dynamic model listing via the free
+                         # Models API (or set ANTHROPIC_API_KEY). Never used for inference.
   codex:
     enabled: true
     cli_path: "codex"

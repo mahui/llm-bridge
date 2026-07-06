@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import time
 from contextlib import aclosing
 from typing import AsyncIterator
 
+import httpx
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -42,15 +45,23 @@ from llm_bridge.providers.base import BaseProvider, ProviderError, ProviderStatu
 
 logger = logging.getLogger(__name__)
 
-# Model name mapping: short name -> SDK model alias
+# Model name mapping: short name -> SDK model alias. Unknown names pass
+# through unchanged — the CLI accepts full model names (e.g. claude-fable-5).
 MODEL_MAP = {
     "claude-sonnet-4-6": "sonnet",
     "claude-opus-4-6": "opus",
+    "claude-fable-5": "fable",
     "sonnet": "sonnet",
     "opus": "opus",
+    "fable": "fable",
 }
 
-AVAILABLE_MODELS = ["claude-sonnet-4-6", "claude-opus-4-6"]
+# Fallback when no Anthropic API key is configured for dynamic listing.
+# (No CLI list-models command exists: anthropics/claude-code#12612)
+FALLBACK_MODELS = ["claude-fable-5", "claude-sonnet-4-6", "claude-opus-4-6"]
+
+MODELS_API_URL = "https://api.anthropic.com/v1/models"
+MODELS_CACHE_TTL = 3600.0  # seconds
 
 # Limit concurrent SDK sessions (each spawns a CLI process)
 MAX_CONCURRENT = 2
@@ -81,10 +92,15 @@ def _split_messages(request: ChatCompletionRequest) -> tuple[str | None, str]:
 class ClaudeProvider(BaseProvider):
     """Provider adapter using the official claude-agent-sdk."""
 
-    def __init__(self, cli_path: str = "claude") -> None:
+    def __init__(self, cli_path: str = "claude", api_key: str = "") -> None:
         super().__init__()
         self.cli_path = cli_path  # kept for config compat; SDK bundles its own CLI
+        # Optional: only used for the free Models API listing endpoint, never
+        # for inference (inference goes through the subscription-authed SDK).
+        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+        self._models_cache: list[str] | None = None
+        self._models_fetched_at = 0.0
 
     @property
     def name(self) -> str:
@@ -106,7 +122,7 @@ class ClaudeProvider(BaseProvider):
     ) -> ClaudeAgentOptions:
         model_key = request.model.split("/")[-1]
         return ClaudeAgentOptions(
-            model=MODEL_MAP.get(model_key, "sonnet"),
+            model=MODEL_MAP.get(model_key, model_key),
             system_prompt=system_prompt,
             tools=[],  # pure chat: no built-in tools
             max_turns=1,
@@ -206,8 +222,42 @@ class ClaudeProvider(BaseProvider):
 
         yield make_final_chunk(state, finish_reason=finish_reason, usage=usage)
 
+    async def _fetch_models_api(self) -> list[str] | None:
+        """List models via the Anthropic Models API (free endpoint, no quota).
+
+        Returns None when no API key is configured or the request fails —
+        callers fall back to FALLBACK_MODELS.
+        """
+        if not self.api_key:
+            return None
+        if self._models_cache and time.monotonic() - self._models_fetched_at < MODELS_CACHE_TTL:
+            return self._models_cache
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    MODELS_API_URL,
+                    headers={
+                        "x-api-key": self.api_key,
+                        "anthropic-version": "2023-06-01",
+                    },
+                )
+                resp.raise_for_status()
+                ids = [
+                    m["id"]
+                    for m in resp.json().get("data", [])
+                    if m.get("id", "").startswith("claude")
+                ]
+            if ids:
+                self._models_cache = ids
+                self._models_fetched_at = time.monotonic()
+                return ids
+        except (httpx.HTTPError, KeyError, ValueError) as e:
+            logger.warning("Claude Models API listing failed, using fallback: %s", e)
+        return None
+
     async def list_models(self) -> list[ModelInfo]:
+        ids = await self._fetch_models_api() or FALLBACK_MODELS
         return [
             ModelInfo(id=f"claude/{m}", owned_by="claude")
-            for m in AVAILABLE_MODELS
+            for m in ids
         ]

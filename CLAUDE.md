@@ -64,6 +64,8 @@ uv run python scripts/test_providers.py --providers claude codex  # Smoke test (
 
 - Chat-only (no tools/vision); requests with `role="tool"` messages are flattened away
 - CLI subprocess latency ~3-8s per request (codex/gemini)
-- Codex model list is hardcoded (CLI has no list-models command)
+- Model lists: codex reads `$CODEX_HOME/models_cache.json` (CLI-maintained); claude uses the
+  free Anthropic Models API when an API key is configured (listing only, never inference),
+  else hardcoded fallback; gemini hardcoded (no headless list command)
 - Gemini free tier has strict rate limits (429)
 - Headless Claude usage bills against monthly Agent SDK credits, not the interactive pool

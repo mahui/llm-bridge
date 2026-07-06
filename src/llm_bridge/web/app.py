@@ -36,7 +36,10 @@ async def lifespan(app: FastAPI):
     providers_to_init = []
 
     if config.providers.claude.enabled:
-        cl = ClaudeProvider(cli_path=config.providers.claude.cli_path)
+        cl = ClaudeProvider(
+            cli_path=config.providers.claude.cli_path,
+            api_key=config.providers.claude.api_key,
+        )
         providers_to_init.append(("claude", cl))
 
     if config.providers.codex.enabled:
