@@ -1,6 +1,6 @@
 [project]
 name = "llm-bridge"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local personal AI gateway: Claude Code, Codex, and Antigravity CLI behind one OpenAI-compatible API"
 readme = "README.md"
 license = "MIT"
@@ -23,6 +23,10 @@ dependencies = [
     "pydantic>=2.10",
     "pyyaml>=6.0",
     "claude-agent-sdk>=0.2.110",
+    # Transitive (via claude-agent-sdk -> mcp -> pyjwt[crypto]). cryptography
+    # >=49 dropped Intel macOS wheels; keep Intel Macs on 48.x so installs
+    # don't require a Rust + OpenSSL build toolchain.
+    "cryptography<49; sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
 
 [project.urls]

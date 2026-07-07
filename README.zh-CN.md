@@ -58,6 +58,10 @@ uv run llm-bridge
 
 打开 **http://127.0.0.1:8787**。前置条件：Python 3.12+、[uv](https://github.com/astral-sh/uv)、至少一个已登录的 CLI（`claude` / `codex login` / `agy`）。
 
+> **Intel Mac 用户注意**：间接依赖 `cryptography` ≥49 不再提供 x86_64 macOS
+> wheel。llm-bridge ≥0.1.1 会在 Intel Mac 上自动钉住 48.x；如果在 0.1.0 上
+> 遇到 Rust/OpenSSL 构建报错，请升级重装。
+
 ## Web UI
 
 ![API view](docs/screenshot-api.png)
