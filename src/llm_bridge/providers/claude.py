@@ -11,8 +11,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import time
 from contextlib import aclosing
+from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
@@ -128,12 +130,53 @@ class ClaudeProvider(BaseProvider):
     def name(self) -> str:
         return "claude"
 
+    async def _detect_auth(self) -> str | None:
+        """Best-effort check that Claude Code has credentials on this machine.
+
+        The SDK bundles its own CLI, so the binary always exists — what a
+        fresh machine lacks is a login. Returns a human-readable source, or
+        None when no known credential signal is present.
+        """
+        if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+            return "env:CLAUDE_CODE_OAUTH_TOKEN"
+        creds = Path.home() / ".claude" / ".credentials.json"
+        if creds.exists():
+            return str(creds)
+        claude_json = Path.home() / ".claude.json"
+        try:
+            if claude_json.exists() and "oauthAccount" in claude_json.read_text():
+                return f"{claude_json} (oauthAccount)"
+        except OSError:
+            pass
+        if sys.platform == "darwin":
+            # macOS stores Claude Code OAuth credentials in the Keychain
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "security", "find-generic-password", "-s", "Claude Code-credentials",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                if await asyncio.wait_for(proc.wait(), timeout=5) == 0:
+                    return "macOS Keychain"
+            except (OSError, asyncio.TimeoutError):
+                pass
+        return None
+
     async def initialize(self) -> None:
-        # The SDK bundles its own CLI, so availability is not PATH-dependent.
-        # Auth problems surface per-request as ProviderError.
         from claude_agent_sdk._cli_version import __cli_version__
 
-        logger.info("Claude provider using claude-agent-sdk (bundled CLI %s)", __cli_version__)
+        auth_source = await self._detect_auth()
+        if auth_source is None:
+            logger.warning(
+                "Claude provider: no credentials found — run `claude` and log in "
+                "(or `claude setup-token`), then restart"
+            )
+            self._status = ProviderStatus.ERROR
+            return
+        logger.info(
+            "Claude provider ready (claude-agent-sdk, bundled CLI %s, auth: %s)",
+            __cli_version__, auth_source,
+        )
         self._status = ProviderStatus.READY
 
     async def shutdown(self) -> None:

@@ -1,6 +1,6 @@
 [project]
 name = "llm-bridge"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local personal AI gateway: Claude Code, Codex, and Antigravity CLI behind one OpenAI-compatible API"
 readme = "README.md"
 license = "MIT"
