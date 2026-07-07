@@ -46,6 +46,9 @@ uv tool install git+https://github.com/mahui/llm-bridge
 llm-bridge
 ```
 
+如果安装后提示 `command not found`，是 `~/.local/bin` 还不在 PATH 里——执行
+`uv tool update-shell` 后重开终端即可。
+
 或从[最新 Release](https://github.com/mahui/llm-bridge/releases/latest) 下载 wheel 后 `uv tool install ./llm_bridge-*.whl`。
 
 **从源码**：

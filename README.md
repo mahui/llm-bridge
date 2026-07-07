@@ -51,6 +51,9 @@ uv tool install git+https://github.com/mahui/llm-bridge
 llm-bridge
 ```
 
+If `llm-bridge` is not found after installing, `~/.local/bin` isn't on your
+PATH yet — run `uv tool update-shell` and restart your terminal.
+
 Or grab the wheel from the [latest release](https://github.com/mahui/llm-bridge/releases/latest) and `uv tool install ./llm_bridge-*.whl`.
 
 **From source**:
